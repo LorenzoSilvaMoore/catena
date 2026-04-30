@@ -1,0 +1,30 @@
+[build-system]
+requires = ["hatchling>=1.29.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "catena"
+version = "0.1.0"
+authors = [
+  { name = "Lorenzo Silva Moore", email = "lorenzosilvamoore@ciencias.unam.mx" },
+]
+description = "A Python library for finite simple continued fractions"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+license = "GPL-3.0-or-later"
+license-files = ["LICEN[CS]E*"]
+
+[project.urls]
+Repository = "https://github.com/LorenzoSilvaMoore/catena"
+Issues = "https://github.com/LorenzoSilvaMoore/catena/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["catena"]
+
+[tool.pytest.ini_options]
+testpaths = ["testing"]

@@ -1,0 +1,29 @@
+old_pac/
+__pycache__/
+*testing.py
+.venv/
+
+
+# latex
+*.aux
+*.bbl
+*.bcf
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.pdf
+*.run.xml
+*.toc
+*.synctex.gz
+
+# tests
+testing/store/*.dat
+testing/store/*.hash
+
+
+# docs
+docs/BIBLIOGRAPHY.md
+docs/BIBLIOGRAPHY_PYTHON.md
+
