@@ -2,7 +2,7 @@ old_pac/
 __pycache__/
 *testing.py
 .venv/
-
+dist/
 
 # latex
 *.aux
@@ -26,4 +26,9 @@ testing/store/*.hash
 # docs
 docs/BIBLIOGRAPHY.md
 docs/BIBLIOGRAPHY_PYTHON.md
+docs/theory
 
+
+# misc
+gitdiff.txt
+build-commands

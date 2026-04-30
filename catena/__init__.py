@@ -12,6 +12,13 @@
 #     "FinateSimpleContinuedFraction",
 # ]
 
+from importlib.metadata import version, PackageNotFoundError
+
+try:
+    __version__ = version("catena-scf")
+except PackageNotFoundError:
+    __version__ = None  # package not installed (e.g. running from source)
+
 from . import mathlib
 
 from .catena import (

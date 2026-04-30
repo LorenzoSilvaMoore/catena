@@ -7,6 +7,25 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ---
 
+## [0.1.0.post1] — 2026-04-30
+
+### Changed
+
+- Distribution renamed from `catena` to `catena-scf` on PyPI (`pip install catena-scf`);
+  the import name `catena` is unchanged.
+- Package description updated to "A Python library for simple continued fractions".
+- Version bumped to `0.1.0.post1` to allow re-upload after the rename.
+
+### Added
+
+- `catena.__version__` — reads the installed version from package metadata via
+  `importlib.metadata`; returns `None` when running from source without installing.
+- `pyproject.toml`: sdist now excludes `docs/` and `testing/`.
+- `requirements.txt`: pin `twine >= 6.2.0, < 7.0.0`.
+- `.gitignore`: added `dist/`, `docs/theory/`, `gitdiff.txt`.
+
+---
+
 ## [0.1.0] — 2025-07-27
 
 Initial release of `catena`.  This is a ground-up rebuild of the earlier
