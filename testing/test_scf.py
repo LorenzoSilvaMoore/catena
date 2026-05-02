@@ -228,7 +228,40 @@ def test_tail_convergent_n1_twos():
 def test_tail_convergent_negative_n_raises_recursion_error():
     scf = SimpleContinuedFraction(ones)
     with pytest.raises(RecursionError):
-        scf.tail_convergent(-1)
+        scf.tail_convergent(-3) # cases -2 and -1 are handled by base cases to account for the 
+        # general definition of the recurrence, but -3 and below should raise an error to prevent infinite recursion.
+
+
+def test_tail_convergent_minus_two_returns_h_minus_2_seed():
+    """tail_convergent(-2) must return the (h₋₂, k₋₂) = (1, 0) seed."""
+    scf = SimpleContinuedFraction(ones)
+    assert scf.tail_convergent(-2) == (1, 0)
+
+
+def test_tail_convergent_minus_one_returns_h_minus_1_seed():
+    """tail_convergent(-1) must return the (h₋₁, k₋₁) = (0, 1) seed."""
+    scf = SimpleContinuedFraction(ones)
+    assert scf.tail_convergent(-1) == (0, 1)
+
+
+def test_tail_convergent_seeds_are_generator_independent():
+    """The seeds do not depend on the generator; verify with two different ones."""
+    for g in [ones, twos, nat_plus_one]:
+        scf = SimpleContinuedFraction(g)
+        assert scf.tail_convergent(-2) == (1, 0)
+        assert scf.tail_convergent(-1) == (0, 1)
+
+
+def test_tail_convergent_n0_consistent_with_seeds():
+    """h_0 = a_1*h_-1 + h_-2 and k_0 = a_1*k_-1 + k_-2 must hold."""
+    for g in [ones, twos, nat_plus_one]:
+        scf = SimpleContinuedFraction(g)
+        h_m2, k_m2 = scf.tail_convergent(-2)
+        h_m1, k_m1 = scf.tail_convergent(-1)
+        h_0,  k_0  = scf.tail_convergent(0)
+        a1 = g(0)
+        assert h_0 == a1 * h_m1 + h_m2
+        assert k_0 == a1 * k_m1 + k_m2
 
 
 # ---------------------------------------------------------------------------
@@ -466,3 +499,29 @@ def test_str_contains_class_name():
 def test_str_contains_integer_part_value():
     scf = SimpleContinuedFraction(ones, integer_part=42)
     assert "42" in str(scf)
+
+
+# ---------------------------------------------------------------------------
+# __int__
+# ---------------------------------------------------------------------------
+
+def test_int_positive_integer_part():
+    scf = SimpleContinuedFraction(ones, integer_part=7)
+    assert int(scf) == 7
+
+
+def test_int_zero_integer_part():
+    scf = SimpleContinuedFraction(twos, integer_part=0)
+    assert int(scf) == 0
+
+
+def test_int_negative_integer_part():
+    scf = SimpleContinuedFraction(ones, integer_part=-5)
+    assert int(scf) == -5
+
+
+def test_int_independent_of_generator():
+    """__int__ reflects integer_part only; the generator is irrelevant."""
+    for g in [ones, twos, nat_plus_one]:
+        scf = SimpleContinuedFraction(g, integer_part=3)
+        assert int(scf) == 3

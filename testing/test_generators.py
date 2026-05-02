@@ -288,3 +288,294 @@ def test_cached_generator_not_idempotent_with_finite():
     cg = CachedGenerator(fg)
     assert cg is not fg
     assert isinstance(cg, CachedGenerator)
+
+
+# ===========================================================================
+# PeriodicGenerator
+# ===========================================================================
+from catena.generators import PeriodicGenerator
+from math import gcd as _gcd
+
+
+# ---------------------------------------------------------------------------
+# Construction – valid
+# ---------------------------------------------------------------------------
+
+def test_periodic_generator_pure_period_no_preperiod():
+    pg = PeriodicGenerator(period=[3, 1, 2])
+    assert len(pg.pre_period) == 0
+    assert len(pg.period) == 3
+
+
+def test_periodic_generator_with_pre_period():
+    pg = PeriodicGenerator(period=[2, 3], pre_period=[1])
+    assert len(pg.pre_period) == 1
+    assert len(pg.period) == 2
+
+
+def test_periodic_generator_period_stored_as_finite_generator():
+    pg = PeriodicGenerator(period=[5, 1])
+    assert isinstance(pg.period, FiniteGenerator)
+
+
+def test_periodic_generator_pre_period_stored_as_finite_generator():
+    pg = PeriodicGenerator(period=[2], pre_period=[7, 3])
+    assert isinstance(pg.pre_period, FiniteGenerator)
+
+
+def test_periodic_generator_empty_pre_period_stored_correctly():
+    pg = PeriodicGenerator(period=[1, 2])
+    assert len(pg.pre_period) == 0
+
+
+def test_periodic_generator_dtypes_period_and_preperiod():
+    pg = PeriodicGenerator(period=[1, 2], pre_period=[3], dtypes=('H', 'B'))
+    assert pg.period.dtype == 'H'
+    assert pg.pre_period.dtype == 'B'
+
+
+def test_periodic_generator_dtypes_mixed_none():
+    pg = PeriodicGenerator(period=[1], pre_period=[2], dtypes=(None, 'H'))
+    assert pg.pre_period.dtype == 'H'
+
+
+# ---------------------------------------------------------------------------
+# Construction – invalid
+# ---------------------------------------------------------------------------
+
+def test_periodic_generator_dtypes_wrong_length_raises():
+    with pytest.raises(ValueError):
+        PeriodicGenerator(period=[1], dtypes=('B',))  # length 1 instead of 2
+
+
+def test_periodic_generator_non_positive_in_period_raises():
+    with pytest.raises(ValueError):
+        PeriodicGenerator(period=[0, 1])
+
+
+def test_periodic_generator_negative_in_period_raises():
+    with pytest.raises(ValueError):
+        PeriodicGenerator(period=[-1, 2])
+
+
+def test_periodic_generator_non_positive_in_pre_period_raises():
+    with pytest.raises(ValueError):
+        PeriodicGenerator(period=[1], pre_period=[0])
+
+
+# ---------------------------------------------------------------------------
+# __new__ – identity short-circuit
+# ---------------------------------------------------------------------------
+
+def test_periodic_generator_idempotent_with_no_pre_period():
+    """PeriodicGenerator(pg) with no extra pre-period returns the same instance."""
+    pg = PeriodicGenerator(period=[1, 2])
+    assert PeriodicGenerator(pg) is pg
+
+
+def test_periodic_generator_idempotent_with_empty_pre_period():
+    pg = PeriodicGenerator(period=[1, 2])
+    assert PeriodicGenerator(pg, pre_period=()) is pg
+
+
+def test_periodic_generator_not_idempotent_with_new_pre_period():
+    """When pre_period is non-empty the short-circuit does not trigger and
+    a fresh PeriodicGenerator is created — but period must be a plain sequence,
+    not another PeriodicGenerator, since that is not a supported calling convention."""
+    pg = PeriodicGenerator(period=[2])
+    pg2 = PeriodicGenerator(period=[2], pre_period=[1])
+    assert pg2 is not pg
+
+
+# ---------------------------------------------------------------------------
+# __call__ – pure period (no pre-period)
+# ---------------------------------------------------------------------------
+
+def test_pure_period_first_element():
+    pg = PeriodicGenerator(period=[5, 3])
+    assert pg(0) == 5
+
+
+def test_pure_period_second_element():
+    pg = PeriodicGenerator(period=[5, 3])
+    assert pg(1) == 3
+
+
+def test_pure_period_wraps_at_length():
+    pg = PeriodicGenerator(period=[5, 3])
+    assert pg(2) == 5   # wraps back to index 0
+    assert pg(3) == 3   # wraps back to index 1
+
+
+def test_pure_period_arbitrary_depth():
+    period = [7, 2, 4]
+    pg = PeriodicGenerator(period=period)
+    for n in range(30):
+        assert pg(n) == period[n % len(period)]
+
+
+def test_pure_period_negative_raises():
+    pg = PeriodicGenerator(period=[1, 2])
+    with pytest.raises(ValueError):
+        pg(-1)
+
+
+# ---------------------------------------------------------------------------
+# __call__ – with pre-period
+# ---------------------------------------------------------------------------
+
+def test_preperiod_elements_come_first():
+    pg = PeriodicGenerator(period=[9], pre_period=[3, 1])
+    assert pg(0) == 3
+    assert pg(1) == 1
+
+
+def test_period_starts_after_preperiod():
+    pg = PeriodicGenerator(period=[9], pre_period=[3, 1])
+    assert pg(2) == 9   # first periodic element
+
+
+def test_period_repeats_after_preperiod():
+    period = [9, 7]
+    pre = [3, 1]
+    pg = PeriodicGenerator(period=period, pre_period=pre)
+    k = len(pre)
+    for n in range(20):
+        if n < k:
+            assert pg(n) == pre[n]
+        else:
+            assert pg(n) == period[(n - k) % len(period)]
+
+
+# ---------------------------------------------------------------------------
+# __eq__
+# ---------------------------------------------------------------------------
+
+def test_eq_same_period_no_preperiod():
+    pg1 = PeriodicGenerator(period=[1, 2])
+    pg2 = PeriodicGenerator(period=[1, 2])
+    assert pg1 == pg2
+
+
+def test_eq_same_period_and_preperiod():
+    pg1 = PeriodicGenerator(period=[3], pre_period=[1, 2])
+    pg2 = PeriodicGenerator(period=[3], pre_period=[1, 2])
+    assert pg1 == pg2
+
+
+def test_neq_different_period():
+    pg1 = PeriodicGenerator(period=[1, 2])
+    pg2 = PeriodicGenerator(period=[1, 3])
+    assert pg1 != pg2
+
+
+def test_neq_different_pre_period():
+    pg1 = PeriodicGenerator(period=[2], pre_period=[1])
+    pg2 = PeriodicGenerator(period=[2], pre_period=[3])
+    assert pg1 != pg2
+
+
+def test_neq_preperiod_vs_no_preperiod():
+    pg1 = PeriodicGenerator(period=[2])
+    pg2 = PeriodicGenerator(period=[2], pre_period=[1])
+    assert pg1 != pg2
+
+
+def test_eq_returns_not_implemented_for_non_periodic():
+    pg = PeriodicGenerator(period=[1])
+    assert pg.__eq__(FiniteGenerator([1])) is NotImplemented
+
+
+# ---------------------------------------------------------------------------
+# __str__ / __repr__
+# ---------------------------------------------------------------------------
+
+def test_str_contains_periodic_generator():
+    pg = PeriodicGenerator(period=[2, 3])
+    assert "PeriodicGenerator" in str(pg)
+
+
+def test_repr_contains_periodic_generator():
+    pg = PeriodicGenerator(period=[2, 3])
+    assert "PeriodicGenerator" in repr(pg)
+
+
+# ---------------------------------------------------------------------------
+# cycle_quadratic_coefficients – hard-coded expected values
+#
+# Formula (integer_part=0 SCF from period [a₁,…,aₖ]):
+#   A = q_{k-1},  B = q_k - p_{k-1},  C = -p_k
+# where (pₙ, qₙ) = convergent(n) of FiniteSimpleContinuedFraction(period).
+# ---------------------------------------------------------------------------
+
+def test_cycle_quadratic_period_1():
+    # period=[1]: convergent(0)=(1,1), convergent(-1)=(0,1) → A=1,B=1,C=-1
+    pg = PeriodicGenerator(period=[1])
+    assert pg.cycle_quadratic_coefficients() == (1, 1, -1)
+
+
+def test_cycle_quadratic_period_2():
+    # period=[2]: convergent(0)=(1,2), convergent(-1)=(0,1) → A=1,B=2,C=-1
+    pg = PeriodicGenerator(period=[2])
+    assert pg.cycle_quadratic_coefficients() == (1, 2, -1)
+
+
+def test_cycle_quadratic_period_1_2():
+    # period=[1,2]: convergent(1)=(2,3), convergent(0)=(1,1) → A=1,B=2,C=-2
+    pg = PeriodicGenerator(period=[1, 2])
+    assert pg.cycle_quadratic_coefficients() == (1, 2, -2)
+
+
+def test_cycle_quadratic_period_4():
+    # period=[4]: convergent(0)=(1,4), convergent(-1)=(0,1) → A=1,B=4,C=-1
+    pg = PeriodicGenerator(period=[4])
+    assert pg.cycle_quadratic_coefficients() == (1, 4, -1)
+
+
+def test_cycle_quadratic_leading_coeff_positive():
+    """A > 0 for all periods."""
+    for period in [[1], [2], [3], [1, 2], [2, 1], [1, 1, 4]]:
+        A, _, _ = PeriodicGenerator(period=period).cycle_quadratic_coefficients()
+        assert A > 0, f"A must be positive for period={period}"
+
+
+def test_cycle_quadratic_gcd_is_one():
+    """gcd(A, B, C) == 1 for all periods."""
+    for period in [[1], [2], [1, 2], [4], [3, 1, 2], [2, 1, 1]]:
+        A, B, C = PeriodicGenerator(period=period).cycle_quadratic_coefficients()
+        assert _gcd(abs(A), abs(B), abs(C)) == 1, f"gcd must be 1 for period={period}"
+
+
+# ---------------------------------------------------------------------------
+# quadratic_coefficients – no pre-period  →  same as cycle
+# ---------------------------------------------------------------------------
+
+def test_quadratic_no_preperiod_equals_cycle():
+    for period in [[1], [2], [1, 2], [4]]:
+        pg = PeriodicGenerator(period=period)
+        assert pg.quadratic_coefficients() == pg.cycle_quadratic_coefficients()
+
+
+# ---------------------------------------------------------------------------
+# quadratic_coefficients – with pre-period
+# [0; 1, (2)]  →  generator pre_period=[1], period=[2]
+# Expected: (2, 0, -1)  →  2x² - 1 = 0  →  x = 1/√2
+# ---------------------------------------------------------------------------
+
+def test_quadratic_with_preperiod_1_period_2():
+    pg = PeriodicGenerator(period=[2], pre_period=[1])
+    assert pg.quadratic_coefficients() == (2, 0, -1)
+
+
+def test_quadratic_with_preperiod_leading_coeff_positive():
+    """A > 0 even when pre-period is present."""
+    for pre, per in [([1], [2]), ([2], [1]), ([1, 1], [2])]:
+        A, _, _ = PeriodicGenerator(period=per, pre_period=pre).quadratic_coefficients()
+        assert A > 0
+
+
+def test_quadratic_with_preperiod_gcd_is_one():
+    """gcd(A, B, C) == 1 when pre-period is present."""
+    for pre, per in [([1], [2]), ([2], [1]), ([1, 1], [2])]:
+        A, B, C = PeriodicGenerator(period=per, pre_period=pre).quadratic_coefficients()
+        assert _gcd(abs(A), abs(B), abs(C)) == 1

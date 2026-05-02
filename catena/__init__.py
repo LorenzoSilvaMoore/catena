@@ -24,6 +24,7 @@ from . import mathlib
 from .catena import (
     SimpleContinuedFraction,
     FiniteSimpleContinuedFraction,
+    PeriodicSimpleContinuedFraction,
 )
 
 from .generators import (
@@ -35,6 +36,7 @@ from .generators import (
 __all__ = [
     "SimpleContinuedFraction",
     "FiniteSimpleContinuedFraction",
+    "PeriodicSimpleContinuedFraction",
     "Generator",
     "CachedGenerator",
     "FiniteGenerator",

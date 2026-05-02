@@ -22,19 +22,14 @@ The standard two-term recurrence is split into two layers:
 * ``convergent(n)`` — lifts the tail convergent to the full SCF by
   incorporating the integer part ``a₀``.
 """
-import re
-import warnings
 
-# from .utils import get_sign
-from .cache import Cache, OrdinalCache, CacheHandler, SetCache, SetLightCache
+from .cache import OrdinalCache, CacheHandler, SetLightCache
 
-from math import gcd, log10
-from typing import Callable, Tuple, Optional, override
-from decimal import Decimal, localcontext, getcontext
-from fractions import Fraction
-from collections.abc import Sequence, Iterable
+from typing import Callable, Tuple, Optional
+from decimal import Decimal
+from collections.abc import Sequence
 
-from .generators import Generator, FiniteGenerator
+from .generators import Generator, FiniteGenerator, PeriodicGenerator
 import catena.mathlib as mathlib
 
 # IntPair = tuple[int, int]
@@ -54,71 +49,6 @@ import catena.mathlib as mathlib
 #         return 0
 
 # class Method:
-#     @staticmethod
-#     def simplify(a: int, b: int) -> IntPair:
-#         d = gcd(a, b)
-#         return a//d, b//d
-    
-#     @staticmethod
-#     def breakdown(a: int, b: int) -> tuple[int, int, int]:
-#         return a//b, b, a%b
-    
-#     # Bit faster
-#     @staticmethod
-#     def euclid_breakdown(a: int, b: int) -> Tuple[int, int, int]:
-#         return divmod(a, b), b
-    
-#     @staticmethod
-#     def swap(p: Any, q: Any) -> Tuple[Any, Any]:
-#         return (p, q)
-    
-#     @staticmethod
-#     def sign(p: int, q: int) -> int:
-#         return get_sign(p) * get_sign(q)
-    
-#     @staticmethod
-#     def abs(p: int, q: int) -> int:
-#         return abs(p), abs(q)
-    
-#     @staticmethod
-#     def devide(p: int, q: int) -> float:
-#         return p / q
-    
-#     @staticmethod
-#     def floor_devide(p: int, q: int) -> int:
-#         return p // q
-    
-#     @staticmethod
-#     def sum_fracs(frac1: IntPair, frac2: IntPair) -> IntPair:
-#         a, b, c, d = *frac1, *frac2
-#         return Method.simplify(a*d + c*b, b * d)
-    
-#     @staticmethod
-#     def mul_fracs(frac1: IntPair, frac2: IntPair) -> IntPair:
-#         a, b, c, d = *frac1, *frac2
-#         return a*b, c*d
-    
-#     @staticmethod
-#     def square_frac(frac: IntPair):
-#         return Method.mul_fracs(frac, frac)
-    
-#     @staticmethod
-#     def sandwich_fracs(frac1: IntPair, frac2: IntPair) -> IntPair:
-#         a, b, c, d = *frac1, *frac2
-#         part1 = Method.simplify(a,c)
-#         part2 = Method.simplify(d,b)
-#         return Method.mul_fracs(part1, part2)
-    
-#     @staticmethod
-#     def log_prod(arr: Sequence[int]) -> int:
-#         tot = 0
-#         for num in arr:
-#             tot += int(log10(num)) + 1
-#         return tot
-    
-#     @staticmethod
-#     def log_avg(arr: Sequence[int]) -> float:
-#         return Method.log_prod(arr)/len(arr)
     
 #     @staticmethod
 #     def greedy_algorithm(p: int, q: int):
@@ -456,10 +386,6 @@ import catena.mathlib as mathlib
 #             yield Decimal(self.head) + self.convergent_as_decimal(i)
 
 
-# from decimal import Decimal
-# from fractions import Fraction
-
-
 class SimpleContinuedFraction:
     """
     An infinite simple continued fraction ``[a₀; a₁, a₂, …]``.
@@ -576,6 +502,10 @@ class SimpleContinuedFraction:
         """
         return self._from_shared(self, self._integer_part + n)
 
+    def __int__(self) -> int:
+        """Returns the integer part of the SCF."""
+        return self.integer_part
+
     def __add__(self, n: int) -> 'SimpleContinuedFraction':
         """
         Shifts the integer part by ``n`` (``scf + n``).
@@ -618,11 +548,17 @@ class SimpleContinuedFraction:
             convergent at depth ``n``.
 
         Raises:
-            RecursionError: If ``n`` is negative (indicates a logic error in
+            RecursionError: If ``n < -2`` (indicates a logic error in
                 the recurrence).
         """
-        if n < 0:
+        if n < -2:
             raise RecursionError("A negative value has been reached at runtime")
+        
+        if n == -2:
+            return 1, 0  # h₋₂ = 0, k₋₂ = 1
+        
+        if n == -1:
+            return 0, 1  # h₋₁ = 1, k₋₁ = 0
         
         if n == 0:
             return 1, self.generator(0)
@@ -652,8 +588,8 @@ class SimpleContinuedFraction:
             tuple[int, int]: ``(numerator, denominator)`` of the *n*-th
             convergent of the full SCF.
         """
-        tail_conv = self.tail_convergent(n)
-        return self.integer_part * tail_conv[1] + tail_conv[0], tail_conv[1]
+        h, k = self.tail_convergent(n)
+        return self.integer_part * k + h, k
         
     
 class FiniteSimpleContinuedFraction(SimpleContinuedFraction):
@@ -674,7 +610,7 @@ class FiniteSimpleContinuedFraction(SimpleContinuedFraction):
       :meth:`from_decimal`.
     """
 
-    def __init__(self, partial_quotients: Sequence[int], integer_part: int = 0, dtype: Optional[str] = None):
+    def __init__(self, partial_quotients: Sequence[int]|FiniteGenerator, integer_part: int = 0, dtype: Optional[str] = None):
         """
         Initialises the finite SCF from a sequence of partial quotients.
 
@@ -690,10 +626,12 @@ class FiniteSimpleContinuedFraction(SimpleContinuedFraction):
         Raises:
             TypeError: If ``partial_quotients`` is not a sequence of integers.
         """
-        if not isinstance(partial_quotients, Sequence) or not all(isinstance(x, int) for x in partial_quotients):
-            raise TypeError(f"Expected a sequence of integers for '{self.__class__.__name__}.partial_quotients' but got {type(partial_quotients)} with elements of type {set(type(x) for x in partial_quotients)}")
-        
-        generator = FiniteGenerator(partial_quotients, dtype=dtype)
+        if isinstance(partial_quotients, FiniteGenerator):
+            generator = partial_quotients
+            
+        else:
+            generator = FiniteGenerator(partial_quotients, dtype=dtype) # FiniteGenerator will validate the input sequence and dtype
+
         super().__init__(generator=generator, integer_part=integer_part)
     
     @property
@@ -752,8 +690,6 @@ class FiniteSimpleContinuedFraction(SimpleContinuedFraction):
 
         Returns :data:`NotImplemented` for unsupported types.
         """
-        if isinstance(other, int):
-            return self._from_shared(self, self.integer_part + other)
         if isinstance(other, FiniteSimpleContinuedFraction):
             tc1 = self.terminal_convergent
             tc2 = other.terminal_convergent
@@ -761,17 +697,25 @@ class FiniteSimpleContinuedFraction(SimpleContinuedFraction):
             s = mathlib.arithmetic.add_fractions(tc1, tc2)
             return FiniteSimpleContinuedFraction.from_rational(s)
         
-        return NotImplemented
+        return super().__add__(other)
     
     def __float__(self):
         """Returns the value of the terminal convergent as a Python ``float``."""
         tc = self.terminal_convergent
         return tc[0]/tc[1]
-    
-    def __int__(self):
-        """Returns :attr:`integer_part`."""
-        return self.integer_part
-    
+
+    def to_decimal(self) -> Decimal:
+        """Returns the exact rational value as a :class:`decimal.Decimal`.
+
+        Python's :class:`~decimal.Decimal` constructor has no ``__decimal__``
+        protocol (unlike :class:`float` which calls ``__float__``), so
+        ``Decimal(scf)`` cannot work directly.  Call this method instead::
+
+            d = scf.to_decimal()
+        """
+        tc = self.terminal_convergent
+        return Decimal(tc[0])/Decimal(tc[1])
+
     def __bool__(self):
         """Returns ``False`` only when ``integer_part == 0`` and the tail is empty."""
         return self.integer_part != 0 or len(self) != 0
@@ -827,3 +771,114 @@ class FiniteSimpleContinuedFraction(SimpleContinuedFraction):
         r = mathlib.convert.from_decimal_to_rational(d)
         return cls.from_rational(r)
 
+
+class PeriodicSimpleContinuedFraction(SimpleContinuedFraction):
+    """
+    A periodic simple continued fraction ``[a₀; a₁, …, aₘ, (b₁, …, bₙ)]``.
+
+    Extends :class:`SimpleContinuedFraction` with two fixed sequences of
+    partial quotients stored in
+    :class:`~catena.generators.FiniteGenerator` instances: the non-repeating
+    prefix ``[a₁, …, aₘ]`` and the repeating period ``(b₁, …, bₙ)``.  Provides:
+
+    * Sequence-like properties: :attr:`non_repeating_part`, :attr:`period`,
+      :attr:`period_length`, ``__len__``, ``__float__``, ``__int__``, ``__bool__``.
+    * Terminal convergent shorthands: :attr:`period_convergent`,
+      :attr:`period_tail_convergent`.
+    * Factory class methods: :meth:`from_rational`, :meth:`from_float`,
+      :meth:`from_decimal`.
+    """
+
+    def __init__(self, period: Sequence[int], pre_period: Optional[Sequence[int]] = [], integer_part: int = 0, dtypes: Optional[Tuple[str, str]] = None):
+        """
+        Initialises the periodic SCF from non-repeating and repeating parts.
+
+        Args:
+            pre_period (Sequence[int], optional): The non-repeating partial
+                quotients ``a₁, a₂, …, aₘ`` (all must be strictly positive).
+            period (Sequence[int]): The repeating partial quotients
+                ``b₁, b₂, …, bₙ`` (all must be strictly positive).
+            integer_part (int): The integer part ``a₀``.  Defaults to ``0``.
+            dtypes (Tuple[str, str], optional): Force specific
+                :class:`array.array` typecodes for compact storage of the
+                period and pre-period respectively (each one of ``'B'``, ``'H'``, ``'I'``, ``'L'``, ``'Q'``).
+                When ``None``, the smallest fitting typecode is chosen automatically. 
+                    Note: (str, None) and (None, str) are also accepted to specify a typecode 
+                    for only one of the two sequences.
+        """
+
+        if dtypes is None:
+            dtypes = (None, None)
+
+        if len(dtypes) != 2:
+            raise ValueError(f"Expected a tuple of two typecodes for 'dtypes' but got {dtypes}")
+        
+        generator = PeriodicGenerator(period=period, pre_period=pre_period, dtypes=dtypes)
+        super().__init__(generator=generator, integer_part=integer_part)
+
+    @property
+    def generator(self) -> PeriodicGenerator:
+        """The :class:`~catena.generators.PeriodicGenerator` holding the partial quotients."""
+        return super().generator
+    
+    @property
+    def non_repeating_part(self) -> Tuple[int, ...]:
+        """The non-repeating partial quotients ``(a₁, a₂, …, aₘ)`` as an immutable tuple."""
+        return tuple(self.generator.pre_period)
+    
+    @property
+    def period(self) -> Tuple[int, ...]:
+        """The repeating partial quotients ``(b₁, b₂, …, bₙ)`` as an immutable tuple."""
+        return tuple(self.generator.period)
+    
+    def __str__(self):
+        return f"PeriodicSimpleContinuedFraction(non_repeating_part={self.non_repeating_part}, period={self.period}, integer_part={self.integer_part})"
+    
+    def __repr__(self):
+        return f"PeriodicSimpleContinuedFraction(generator={self.generator}, integer_part={self.integer_part}, cache_handler={self.cache_handler})"
+    
+    # def __float__(self):
+    #     """Returns the value of the SCF as a Python ``float``."""
+    #     A, B, C = self.quadratic_coefficients()
+    #     P = -B
+    #     D = B**2 - 4*A*C
+    #     Q = 2*A
+    #     return (P + D**0.5)/Q
+
+    # def __decimal__(self):
+    #     """Returns the value of the SCF as a :class:`decimal.Decimal`."""
+    #     A, B, C = self.quadratic_coefficients()
+    #     P = Decimal(-B)
+    #     D = Decimal(B)**2 - 4*Decimal(A)*Decimal(C)
+    #     Q = 2*Decimal(A)
+    #     return (P + D.sqrt())/Q
+    
+    def quadratic_coefficients(self) -> Tuple[int, int, int]:
+        """
+        As any periodic SCF represents a quadratic irrational, this method
+        computes the coefficients (A, B, C) of the quadratic equation
+        A·x² + B·x + C = 0 satisfied by the value of this periodic SCF.
+
+        Returns:
+            tuple[int, int, int]: The coefficients (A, B, C) of the
+            quadratic equation.
+        """
+        A, B, C = self.generator.quadratic_coefficients()
+        if self.integer_part != 0:
+            # If a₀ is not zero, we need to adjust the coefficients to account for the shift in the value of the SCF.
+            # Say x is the SCF of intrest, and let y = x - a₀, where y satisfies the quadratic equation
+            # A·y² + B·y + C = 0. Substituting y = x - a₀:
+            # A·(x - a₀)² + B·(x - a₀) + C = 0
+            # Expanding this gives:
+            # A·(x² - 2·a₀·x + a₀²) + B·x - B·a₀ + C = 0
+            # -> A·x² + (B - 2·A·a₀)·x + (A·a₀² - B·a₀ + C) = 0
+
+            # Since A is garanteed to be positive, we can directly use it without worrying about the sign.
+            # Likewiese, gdc(A, B, C) = 1, so we don't need to worry about simplifying the coefficients.
+
+            A_adj = A
+            B_adj = B - 2 * A * self.integer_part
+            C_adj = C - B * self.integer_part + A * self.integer_part ** 2
+            return A_adj, B_adj, C_adj
+        
+        return A, B, C

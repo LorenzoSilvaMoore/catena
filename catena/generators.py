@@ -15,11 +15,16 @@ All three types share the same calling convention: ``generator(n)`` returns the
 *n*-th partial quotient (0-indexed), which must always be a strictly positive
 integer.
 """
-from collections.abc import Callable, Collection
+from collections.abc import Callable, Collection, Sequence
 from array import array
 
-from .cache import Cache, CacheHandler, SetCache, SetLightCache, OrdinalCache
+from math import gcd
+from typing import Optional, Tuple
+
+from .cache import Cache, CacheHandler, SetLightCache, OrdinalCache
 from .strings import safe_int_str
+from .mathlib.core import get_sign
+
 
 
 class Generator(Callable):
@@ -43,11 +48,11 @@ class Generator(Callable):
         Raises:
             TypeError: If ``generator`` is not callable.
         """
-        if not callable(generator):
-            raise TypeError(f"Generator requires a callable, got {type(generator).__name__}.")
-        
         if isinstance(generator, type(self)):
             return
+        
+        if not callable(generator):
+            raise TypeError(f"Generator requires a callable, got {type(generator).__name__}.")
 
         self.cached = False
         self.generator = generator
@@ -151,12 +156,17 @@ class FiniteGenerator(Generator):
         code: (0, (1 << (array(code, []).itemsize * 8)) - 1) for code in _dtypes
     }
 
-    def __init__(self, data: Collection[int], dtype: str = None, *args, **kwargs):
+    def __new__(cls, data, dtype=None, *args, **kwargs):
+        if isinstance(data, cls):
+            return data
+        return object.__new__(cls)
+
+    def __init__(self, data: Sequence[int], dtype: str = None, *args, **kwargs):
         """
-        Initialises the finite generator from a collection of positive integers.
+        Initialises the finite generator from a sequence of positive integers.
 
         Args:
-            data (Collection[int]): The sequence of strictly positive partial
+            data (Sequence[int]): The sequence of strictly positive partial
                 quotients.
             dtype (str, optional): Force a specific unsigned array typecode
                 (one of ``'B'``, ``'H'``, ``'I'``, ``'L'``, ``'Q'``).  When
@@ -164,12 +174,15 @@ class FiniteGenerator(Generator):
                 automatically.
 
         Raises:
-            TypeError: If ``data`` is not a :class:`~collections.abc.Collection`.
+            TypeError: If ``data`` is not a :class:`~collections.abc.Sequence`.
             ValueError: If ``dtype`` is not a supported typecode, or if any
                 value in ``data`` is not a strictly positive integer.
         """
-        if not isinstance(data, Collection):
-            raise TypeError(f"data must be a Collection of integers, got {type(data).__name__}.")
+        if isinstance(data, FiniteGenerator):
+            return
+        
+        if not isinstance(data, Sequence) or not all(isinstance(x, int) for x in data):
+            raise TypeError(f"data must be a Sequence of integers, got {type(data).__name__} with elements of type {set(type(x) for x in data)}")
 
         if dtype is not None and dtype not in self._dtypes:
             raise ValueError(f"Invalid dtype '{dtype}'. Supported dtypes are: {', '.join(self._dtypes)}.")
@@ -268,6 +281,11 @@ class FiniteGenerator(Generator):
 
     def __repr__(self):
         return f"FiniteGenerator[{self.dtype or 'arbitrary'} × {self.size}]"
+    
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, FiniteGenerator):
+            return NotImplemented
+        return self.dtype == other.dtype and self._data == other._data
 
     @property
     def view(self) -> memoryview:
@@ -283,3 +301,154 @@ class FiniteGenerator(Generator):
         return memoryview(self._data).toreadonly()
     
 
+class PeriodicGenerator(Generator):
+    """
+    A :class:`Generator` that produces a periodic sequence of positive integers.
+
+    The sequence is defined by a finite list of integers representing the
+    pre-period followed by a finite list representing the period.
+    For example, the simple continued fraction expansion of $(7+\\sqrt{10})/4$ is
+    $[2; 1, 1, 5, 1, 1, 1, 24, 1, 1, 1, 5, \\ldots]$, where the integer part is $2$, the
+    pre-period is $[1, 1]$, and the period is $[5, 1, 1, 1, 24, 1, 1, 1]$.
+    """
+    def __init__(self, period: Collection[int], pre_period: Collection[int] = (), dtypes: Optional[Tuple[str, str]] = None, *args, **kwargs):
+        """
+        Initialises the periodic generator.
+
+        Args:
+            period (Collection[int]): The finite sequence of positive integers
+                representing the periodic part of the continued fraction.
+            pre_period (Collection[int], optional): The finite sequence of positive
+                integers representing the aperiodic pre-period (default: empty).
+            dtypes (Tuple[str, str], optional): Force specific :class:`array.array` typecodes for compact storage of the
+                period and pre-period respectively (each one of ``'B'``, ``'H'``, ``'I'``, ``'L'``, ``'Q'``).
+                When ``None``, the smallest fitting typecode is chosen automatically. 
+                    Note: (str, None) and (None, str) are also accepted to specify a typecode 
+                    for only one of the two sequences.
+
+        Raises:
+            ValueError: If any value in ``period`` or ``pre_period`` is not a strictly
+                positive integer.
+        """
+        if isinstance(period, PeriodicGenerator) and len(pre_period) == 0:
+            return  # __new__ returned the existing instance; skip re-initialisation
+
+        if dtypes is None:
+            dtypes = (None, None)
+
+        elif len(dtypes) != 2:
+            raise ValueError(f"Expected a tuple of two typecodes for 'dtypes' but got {dtypes}")
+
+        self._period = FiniteGenerator(period, dtype=dtypes[0])
+        self._pre_period = FiniteGenerator(pre_period, dtype=dtypes[1])
+
+        if len(self._pre_period) != 0:
+            def _at(n: int) -> int:
+                if n < len(self._pre_period):
+                    return self._pre_period[n]
+                else:
+                    return self._period[(n - len(self._pre_period)) % len(self._period)]
+        else:
+            def _at(n: int) -> int:
+                return self._period[n % len(self._period)]
+
+        super().__init__(generator=_at, *args, **kwargs)
+
+    @property
+    def period(self) -> FiniteGenerator:
+        """The finite sequence of positive integers representing the period."""
+        return self._period
+    
+    @property
+    def pre_period(self) -> FiniteGenerator:
+        """The finite sequence of positive integers representing the aperiodic pre-period."""
+        return self._pre_period
+    
+
+    def __str__(self) -> str:
+        return f"PeriodicGenerator(period={self.period}, pre_period={self.pre_period})"
+    
+    def __repr__(self):
+        return f"PeriodicGenerator(period={repr(self.period)}, pre_period={repr(self.pre_period)})"
+    
+    def __new__(cls, period, pre_period=(), *args, **kwargs):
+        """
+        Returns the existing instance if ``period`` is already a
+        :class:`PeriodicGenerator` with no pre-period, avoiding unnecessary
+        double-wrapping.
+        """
+        if isinstance(period, PeriodicGenerator) and len(pre_period) == 0:
+            return period
+        return object.__new__(cls)
+    
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, PeriodicGenerator):
+            return NotImplemented
+        return self.period == other.period and self.pre_period == other.pre_period
+    
+
+    def quadratic_coefficients(self) -> tuple[int, int, int]:
+        """
+        Returns the coefficients of the corresponding quadratic polynomial.
+        
+        The quadratic polynomial is derived from the periodic part of the continued fraction expansion,
+        and its roots correspond to the value of the infinite periodic continued fraction defined 
+        by the period and the pre-period (with a_0 = 0). If a pre-period is present, the coefficients are 
+        adjusted to account for it.
+        
+        Returns:
+            tuple[int, int, int]: Coefficients (A, B, C) of the quadratic polynomial Ax^2 + Bx + C = 0, 
+            where A > 0 and gcd(A, B, C) = 1.
+        """
+        cyclic_coefficients = self.cycle_quadratic_coefficients()
+        if len(self.pre_period) == 0:
+            return cyclic_coefficients
+        
+        from .catena import FiniteSimpleContinuedFraction
+        k = len(self.pre_period)
+        A, B, C = cyclic_coefficients
+        scf = FiniteSimpleContinuedFraction(partial_quotients=self.pre_period)
+        ck = scf.convergent(k-1)
+        ck_minus_1 = scf.convergent(k-2)
+
+        pk, qk = ck
+        pk_minus_1, qk_minus_1 = ck_minus_1
+
+        # Adjust coefficients to account for the pre-period
+        A_new = A * qk**2 - B * qk * qk_minus_1 + C * qk_minus_1**2
+        B_new = -2 * A * pk * qk + B * (pk * qk_minus_1 + pk_minus_1 * qk) - 2 * C * pk_minus_1 * qk_minus_1
+        C_new = A * pk**2 - B * pk * pk_minus_1 + C * pk_minus_1**2
+
+        quadratic_sign = get_sign(A_new)
+        g = gcd(A_new, B_new, C_new)
+        return (A_new // g) * quadratic_sign, (B_new // g) * quadratic_sign, (C_new // g) * quadratic_sign
+
+    
+    def cycle_quadratic_coefficients(self) -> tuple[int, int, int]:
+        """
+        Returns the coefficients of the corresponding quadratic polynomial for the period only.
+
+        The quadratic polynomial is derived from the periodic part of the continued fraction expansion,
+        and its roots correspond to the value of the infinite periodic continued fraction defined by 
+        the period (with a_0 = 0).
+
+        Returns:
+            tuple[int, int, int]: Coefficients (A, B, C) of the quadratic polynomial Ax^2 + Bx + C = 0, 
+            where A > 0 and gcd(A, B, C) = 1.
+        """
+        from .catena import FiniteSimpleContinuedFraction
+
+        k = len(self.period)
+        scf = FiniteSimpleContinuedFraction(partial_quotients=self.period)
+        ck = scf.convergent(k-1)
+        ck_minus_1 = scf.convergent(k-2)
+        pk, qk = ck
+        pk_minus_1, qk_minus_1 = ck_minus_1
+
+        A = qk_minus_1
+        B = qk - pk_minus_1
+        C = -pk
+        quadratic_sign = get_sign(A)
+        g = gcd(A, B, C)
+        return (A // g) * quadratic_sign, (B // g) * quadratic_sign, (C // g) * quadratic_sign
+    

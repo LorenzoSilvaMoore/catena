@@ -40,7 +40,17 @@ and are best rational approximations to the value being expanded.
 
 ## Installation
 
-Not yet published to PyPI.  Install in development mode from the repository root:
+```bash
+pip install catena-scf
+```
+
+The import name is `catena` (unchanged from the distribution name):
+
+```python
+import catena
+```
+
+**Development install** from the repository root:
 
 ```bash
 pip install -e .

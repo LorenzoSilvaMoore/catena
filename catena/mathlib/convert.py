@@ -105,11 +105,19 @@ def from_rational_to_scf(r: Rational) -> tuple[int, list[int]]:
     else:
         raise ValueError(f"Invalid input type: {type(r)}. Expected Fraction, tuple[int, int], or int.")
     
+    if p == 0:
+        return 0, []
+    
+    if q == 0:
+        raise ValueError("Denominator cannot be zero.")
+
     scf = []
     while abs(p) > 0 and q != 0:
         h, q, p = euclidean_step(p, q)
         scf.append(h)
+    
     return scf[0], scf[1:]
+
 
 def from_float_to_rational(f: float, limit_denominator: int = None) -> Rational:
     """

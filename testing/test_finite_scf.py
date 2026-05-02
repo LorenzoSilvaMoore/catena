@@ -95,6 +95,24 @@ def test_construction_generator_is_finite_generator():
     assert isinstance(scf.generator, FiniteGenerator)
 
 
+def test_construction_from_finite_generator_directly():
+    """Passing a FiniteGenerator instance must be accepted and reused as-is."""
+    gen = FiniteGenerator([7, 16])
+    scf = FiniteSimpleContinuedFraction(gen, integer_part=3)
+    assert scf.generator is gen
+
+
+def test_construction_from_finite_generator_correct_value():
+    gen = FiniteGenerator([7, 16])
+    scf = FiniteSimpleContinuedFraction(gen, integer_part=3)
+    assert scf.terminal_convergent == (355, 113)
+
+
+def test_construction_from_finite_generator_integer_part_respected():
+    gen = FiniteGenerator([2])
+    scf = FiniteSimpleContinuedFraction(gen, integer_part=5)
+    assert scf.integer_part == 5
+
 # ---------------------------------------------------------------------------
 # Construction – invalid inputs
 # ---------------------------------------------------------------------------
@@ -501,6 +519,55 @@ def test_bool_true_negative_integer_part():
 def test_bool_false_zero_integer_part_and_empty_tail():
     scf = FiniteSimpleContinuedFraction([], integer_part=0)
     assert bool(scf) is False
+
+
+# ---------------------------------------------------------------------------
+# to_decimal
+# ---------------------------------------------------------------------------
+
+def test_to_decimal_returns_decimal_type():
+    from decimal import Decimal
+    scf = FiniteSimpleContinuedFraction([7], integer_part=3)  # 22/7
+    assert isinstance(scf.to_decimal(), Decimal)
+
+
+def test_to_decimal_value_22_over_7():
+    from decimal import Decimal
+    scf = FiniteSimpleContinuedFraction([7], integer_part=3)
+    assert scf.to_decimal() == Decimal(22) / Decimal(7)
+
+
+def test_to_decimal_value_355_over_113():
+    from decimal import Decimal
+    scf = FiniteSimpleContinuedFraction([7, 16], integer_part=3)
+    assert scf.to_decimal() == Decimal(355) / Decimal(113)
+
+
+def test_to_decimal_value_1_over_2():
+    from decimal import Decimal
+    scf = FiniteSimpleContinuedFraction([2], integer_part=0)
+    assert scf.to_decimal() == Decimal("0.5")
+
+
+def test_to_decimal_matches_terminal_convergent():
+    """to_decimal() must equal Decimal(p)/Decimal(q) of terminal_convergent."""
+    from decimal import Decimal
+    for p, q in [(3, 7), (22, 7), (355, 113), (7, 5), (13, 9)]:
+        scf = FiniteSimpleContinuedFraction.from_rational((p, q))
+        expected = Decimal(p) / Decimal(q)
+        assert scf.to_decimal() == expected
+
+
+def test_to_decimal_negative_fraction():
+    from decimal import Decimal
+    scf = FiniteSimpleContinuedFraction.from_rational((-3, 7))
+    assert scf.to_decimal() == Decimal(-3) / Decimal(7)
+
+
+def test_to_decimal_integer_only_scf():
+    from decimal import Decimal
+    scf = FiniteSimpleContinuedFraction([], integer_part=5)
+    assert scf.to_decimal() == Decimal(5)
 
 
 # ---------------------------------------------------------------------------
