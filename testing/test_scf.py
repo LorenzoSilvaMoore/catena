@@ -525,3 +525,96 @@ def test_int_independent_of_generator():
     for g in [ones, twos, nat_plus_one]:
         scf = SimpleContinuedFraction(g, integer_part=3)
         assert int(scf) == 3
+
+
+# ---------------------------------------------------------------------------
+# tail()
+# ---------------------------------------------------------------------------
+
+def test_tail_integer_part_is_zero():
+    scf = SimpleContinuedFraction(ones, integer_part=5)
+    assert scf.tail().integer_part == 0
+
+
+def test_tail_shares_generator():
+    scf = SimpleContinuedFraction(twos, integer_part=3)
+    assert scf.tail().generator is scf.generator
+
+
+def test_tail_shares_cache():
+    scf = SimpleContinuedFraction(ones, integer_part=7)
+    tail = scf.tail()
+    assert tail.tail_convergent is scf.tail_convergent
+
+
+def test_tail_convergents_match_original():
+    """tail().tail_convergent(n) == scf.tail_convergent(n) for all n."""
+    scf = SimpleContinuedFraction(twos, integer_part=3)
+    tail = scf.tail()
+    for n in range(6):
+        assert tail.tail_convergent(n) == scf.tail_convergent(n)
+
+
+def test_tail_of_zero_integer_part_returns_equivalent():
+    scf = SimpleContinuedFraction(ones, integer_part=0)
+    assert scf.tail().integer_part == 0
+
+
+# ---------------------------------------------------------------------------
+# inverse()  (SimpleContinuedFraction base implementation)
+#
+# Two identities:
+#   a₀ = 0:  [0; a₁, a₂, …]  →  1/x = [a₁; a₂, a₃, …]
+#   a₀ ≠ 0:  [a₀; a₁, a₂, …] →  1/x = [0; a₀, a₁, a₂, …]
+# ---------------------------------------------------------------------------
+
+def test_inverse_integer_part_zero_shifts_generator():
+    # [0; 2, 2, 2, …]  →  inverse = [2; 2, 2, …]
+    scf = SimpleContinuedFraction(twos, integer_part=0)
+    inv = scf.inverse()
+    assert inv.integer_part == 2
+    # Generator of inverse at n is twos(n+1) = 2
+    for n in range(5):
+        assert inv.generator(n) == 2
+
+
+def test_inverse_nonzero_integer_part_prepends_it():
+    # [1; 2, 2, …]  →  inverse = [0; 1, 2, 2, …]
+    scf = SimpleContinuedFraction(twos, integer_part=1)
+    inv = scf.inverse()
+    assert inv.integer_part == 0
+    assert inv.generator(0) == 1    # prepended integer_part
+    assert inv.generator(1) == 2    # original generator(0)
+    assert inv.generator(2) == 2    # original generator(1)
+
+
+def test_inverse_double_returns_original():
+    """scf.inverse().inverse() is scf (identity caching)."""
+    scf = SimpleContinuedFraction(twos, integer_part=1)
+    assert scf.inverse().inverse() is scf
+
+
+def test_inverse_is_cached():
+    scf = SimpleContinuedFraction(ones, integer_part=1)
+    inv1 = scf.inverse()
+    inv2 = scf.inverse()
+    assert inv1 is inv2
+
+
+def test_inverse_write_once_protection():
+    """Setting _inverse a second time raises AttributeError."""
+    scf = SimpleContinuedFraction(ones, integer_part=1)
+    scf.inverse()  # populate _inverse
+    with pytest.raises(AttributeError):
+        scf._inverse = None
+
+
+def test_inverse_convergents_are_reciprocals():
+    """For [1; 2, 2, 2, …] (√2), the n-th convergent of inverse ≈ 1/√2."""
+    scf = SimpleContinuedFraction(twos, integer_part=1)
+    inv = scf.inverse()
+    # convergent(n) of inverse approaches 1/√2; check float approximation
+    p, q = inv.convergent(30)
+    from math import isclose, sqrt
+    assert isclose(p / q, 1 / sqrt(2), rel_tol=1e-9)
+

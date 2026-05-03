@@ -8,7 +8,7 @@ pytest testing/
 
 ## Large-integer store
 
-Some tests require very large integers (e.g. `101**5001`, million-digit randoms) that are slow to compute from scratch on every run.  
+Some tests may require very large integers (e.g. `101**5001`, million-digit randoms) that are slow to compute from scratch on every run.  
 `bigints.py` and `conftest.py` together handle this via a compact binary store under `testing/store/`.
 
 ### How it works
@@ -19,6 +19,8 @@ Some tests require very large integers (e.g. `101**5001`, million-digit randoms)
 | `conftest.py` | `big_int_store` session fixture — rebuilds the store automatically when `_PRECOMPUTED` changes, then exposes the loaded dict to tests. |
 | `testing/store/*.dat` | Binary files (`int.to_bytes` layout) — fast to load, much faster than re-parsing decimal strings. |
 | `testing/store/bigints.hash` | SHA-256 fingerprint of the store files; used to skip rebuilds when nothing has changed. |
+
+> **Note:** `testing/store/*.dat` and `testing/store/*.hash` are **not git-tracked** (listed in `.gitignore`).  They are generated locally on first run and regenerated automatically whenever `_PRECOMPUTED` changes.  You do not need to commit them, and you should not.
 
 ### Adding pre-computed integers
 

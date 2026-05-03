@@ -1,7 +1,7 @@
 """
 Generators for partial-quotient sequences used in continued fraction expansions.
 
-This module provides three callable generator types:
+This module provides four callable generator types:
 
 - :class:`Generator` — a thin wrapper around any callable ``f: int -> int`` that
   validates its output (positive integer) on every call.
@@ -9,9 +9,16 @@ This module provides three callable generator types:
   :class:`~catena.cache.OrdinalCache` to avoid redundant computation.
 - :class:`FiniteGenerator` — a ``Generator`` backed by a fixed sequence of
   integers stored as a compact :class:`array.array` (or a plain tuple for
-  values exceeding the 64-bit range).
+  values exceeding the 64-bit range).  Supports identity short-circuit: passing
+  an existing :class:`FiniteGenerator` returns the same object unchanged.
+- :class:`PeriodicGenerator` — a ``Generator`` that produces an eventually
+  periodic sequence from an aperiodic pre-period followed by an infinitely
+  repeating period.  Provides
+  :meth:`~PeriodicGenerator.cycle_quadratic_coefficients` and
+  :meth:`~PeriodicGenerator.quadratic_coefficients` to recover the quadratic
+  equation satisfied by the represented irrational.
 
-All three types share the same calling convention: ``generator(n)`` returns the
+All types share the same calling convention: ``generator(n)`` returns the
 *n*-th partial quotient (0-indexed), which must always be a strictly positive
 integer.
 """

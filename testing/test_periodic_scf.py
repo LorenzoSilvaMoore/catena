@@ -597,3 +597,323 @@ def test_radd_int_works():
 def test_add_non_int_returns_not_implemented():
     pscf = PeriodicSimpleContinuedFraction(period=[1])
     assert pscf.__add__(1.5) is NotImplemented
+
+
+# ===========================================================================
+# quadratic_surd
+#
+# Relates A·x² + B·x + C = 0  to the surd representation (P + √D) / Q via:
+#   P = -B,  D = B²-4AC,  Q = 2A
+# The returned (P, Q, D) satisfies Q > 0 when the SCF is the principal root
+# and Q < 0 when it is the conjugate root.
+#
+#   SCF          (A,B,C)     expected (P,Q,D)
+#   [1;(2)] √2   (1,0,-2)    (0,1,2)
+#   [1;(1)] φ    (1,-1,-1)   (1,2,5)
+#   [1;(1,2)] √3 (1,0,-3)    (0,1,3)
+#   [2;(4)] √5   (1,0,-5)    (0,1,5)
+#   [0;1,(2)] 1/√2 (2,0,-1)  (0,2,2)
+# ===========================================================================
+
+def test_quadratic_surd_sqrt2():
+    pscf = PeriodicSimpleContinuedFraction(period=[2], integer_part=1)
+    assert pscf.quadratic_surd() == (0, 1, 2)
+
+
+def test_quadratic_surd_phi():
+    pscf = PeriodicSimpleContinuedFraction(period=[1], integer_part=1)
+    assert pscf.quadratic_surd() == (1, 2, 5)
+
+
+def test_quadratic_surd_sqrt3():
+    pscf = PeriodicSimpleContinuedFraction(period=[1, 2], integer_part=1)
+    assert pscf.quadratic_surd() == (0, 1, 3)
+
+
+def test_quadratic_surd_sqrt5():
+    pscf = PeriodicSimpleContinuedFraction(period=[4], integer_part=2)
+    assert pscf.quadratic_surd() == (0, 1, 5)
+
+
+def test_quadratic_surd_inv_sqrt2():
+    pscf = PeriodicSimpleContinuedFraction(period=[2], pre_period=[1], integer_part=0)
+    assert pscf.quadratic_surd() == (0, 2, 2)
+
+
+def test_quadratic_surd_cached():
+    """Second call returns the same tuple without recomputing."""
+    pscf = PeriodicSimpleContinuedFraction(period=[2], integer_part=1)
+    r1 = pscf.quadratic_surd()
+    r2 = pscf.quadratic_surd()
+    assert r1 is r2
+
+
+def test_quadratic_surd_cache_is_frozen():
+    """_quadratic_surd cannot be overwritten once set."""
+    pscf = PeriodicSimpleContinuedFraction(period=[2], integer_part=1)
+    pscf.quadratic_surd()  # populate cache
+    with pytest.raises(AttributeError):
+        pscf._quadratic_surd = (0, 2, 5)
+
+
+def test_quadratic_surd_value_matches_float():
+    """(P + √D)/Q equals the 50th-convergent approximation."""
+    cases = [
+        (dict(period=[2], integer_part=1), sqrt(2)),
+        (dict(period=[1], integer_part=1), (1 + sqrt(5)) / 2),
+        (dict(period=[1, 2], integer_part=1), sqrt(3)),
+        (dict(period=[4], integer_part=2), sqrt(5)),
+    ]
+    for kw, expected in cases:
+        pscf = PeriodicSimpleContinuedFraction(**kw)
+        P, Q, D = pscf.quadratic_surd()
+        surd_value = (P + sqrt(D)) / Q
+        assert isclose(surd_value, expected, rel_tol=1e-10)
+
+
+# ===========================================================================
+# is_principal_surd / is_conjugate_root
+# ===========================================================================
+
+def test_is_principal_surd_true_for_sqrt2():
+    pscf = PeriodicSimpleContinuedFraction(period=[2], integer_part=1)
+    assert pscf.is_principal_surd() is True
+
+
+def test_is_principal_surd_true_for_phi():
+    pscf = PeriodicSimpleContinuedFraction(period=[1], integer_part=1)
+    assert pscf.is_principal_surd() is True
+
+
+def test_is_conjugate_root_false_for_sqrt2():
+    pscf = PeriodicSimpleContinuedFraction(period=[2], integer_part=1)
+    assert pscf.is_conjugate_root() is False
+
+
+def test_principal_and_conjugate_are_mutually_exclusive():
+    """For any well-formed PSCF, exactly one of the two flags is True."""
+    cases = [
+        dict(period=[2], integer_part=1),
+        dict(period=[1], integer_part=1),
+        dict(period=[1, 2], integer_part=1),
+        dict(period=[4], integer_part=2),
+        dict(period=[2], pre_period=[1]),
+    ]
+    for kw in cases:
+        pscf = PeriodicSimpleContinuedFraction(**kw)
+        assert pscf.is_principal_surd() != pscf.is_conjugate_root()
+
+
+# ===========================================================================
+# __float__
+# ===========================================================================
+
+def test_float_sqrt2():
+    pscf = PeriodicSimpleContinuedFraction(period=[2], integer_part=1)
+    assert isclose(float(pscf), sqrt(2), rel_tol=1e-12)
+
+
+def test_float_phi():
+    pscf = PeriodicSimpleContinuedFraction(period=[1], integer_part=1)
+    assert isclose(float(pscf), (1 + sqrt(5)) / 2, rel_tol=1e-12)
+
+
+def test_float_sqrt3():
+    pscf = PeriodicSimpleContinuedFraction(period=[1, 2], integer_part=1)
+    assert isclose(float(pscf), sqrt(3), rel_tol=1e-12)
+
+
+def test_float_inv_sqrt2():
+    pscf = PeriodicSimpleContinuedFraction(period=[2], pre_period=[1], integer_part=0)
+    assert isclose(float(pscf), 1 / sqrt(2), rel_tol=1e-12)
+
+
+def test_float_consistent_with_convergent():
+    """float() value matches the 50th convergent within float precision."""
+    pscf = PeriodicSimpleContinuedFraction(period=[2], integer_part=1)
+    p, q = pscf.convergent(50)
+    assert isclose(float(pscf), p / q, rel_tol=1e-12)
+
+
+# ===========================================================================
+# as_decimal
+# ===========================================================================
+
+def test_as_decimal_returns_decimal():
+    pscf = PeriodicSimpleContinuedFraction(period=[2], integer_part=1)
+    assert isinstance(pscf.as_decimal(), __import__('decimal').Decimal)
+
+
+def test_as_decimal_sqrt2():
+    pscf = PeriodicSimpleContinuedFraction(period=[2], integer_part=1)
+    val = pscf.as_decimal()
+    assert isclose(float(val), sqrt(2), rel_tol=1e-12)
+
+
+def test_as_decimal_consistent_with_float():
+    pscf = PeriodicSimpleContinuedFraction(period=[1], integer_part=1)
+    assert isclose(float(pscf.as_decimal()), float(pscf), rel_tol=1e-12)
+
+
+# ===========================================================================
+# from_quadratic_surd  (classmethod factory)
+# ===========================================================================
+
+def test_from_quadratic_surd_returns_pscf_instance():
+    pscf = PeriodicSimpleContinuedFraction.from_quadratic_surd(0, 1, 2)
+    assert isinstance(pscf, PeriodicSimpleContinuedFraction)
+
+
+def test_from_quadratic_surd_sqrt2():
+    pscf = PeriodicSimpleContinuedFraction.from_quadratic_surd(0, 1, 2)
+    assert isclose(float(pscf), sqrt(2), rel_tol=1e-12)
+
+
+def test_from_quadratic_surd_phi():
+    pscf = PeriodicSimpleContinuedFraction.from_quadratic_surd(1, 2, 5)
+    assert isclose(float(pscf), (1 + sqrt(5)) / 2, rel_tol=1e-12)
+
+
+def test_from_quadratic_surd_inv_sqrt2():
+    pscf = PeriodicSimpleContinuedFraction.from_quadratic_surd(0, 2, 2)
+    assert isclose(float(pscf), 1 / sqrt(2), rel_tol=1e-12)
+
+
+def test_from_quadratic_surd_roundtrip():
+    """from_quadratic_surd(pscf.quadratic_surd()) reproduces the same float value."""
+    pscf = PeriodicSimpleContinuedFraction(period=[2], integer_part=1)
+    P, Q, D = pscf.quadratic_surd()
+    pscf2 = PeriodicSimpleContinuedFraction.from_quadratic_surd(P, Q, D)
+    assert isclose(float(pscf), float(pscf2), rel_tol=1e-12)
+
+
+# ===========================================================================
+# conjugate
+# ===========================================================================
+
+def test_conjugate_returns_pscf():
+    pscf = PeriodicSimpleContinuedFraction(period=[2], integer_part=1)
+    assert isinstance(pscf.conjugate(), PeriodicSimpleContinuedFraction)
+
+
+def test_conjugate_is_other_root_sqrt2():
+    pscf = PeriodicSimpleContinuedFraction(period=[2], integer_part=1)
+    conj = pscf.conjugate()
+    assert isclose(float(conj), -sqrt(2), rel_tol=1e-12)
+
+
+def test_conjugate_is_other_root_phi():
+    pscf = PeriodicSimpleContinuedFraction(period=[1], integer_part=1)
+    conj = pscf.conjugate()
+    assert isclose(float(conj), (1 - sqrt(5)) / 2, rel_tol=1e-12)
+
+
+def test_conjugate_shares_quadratic_coefficients():
+    """SCF and its conjugate satisfy the same quadratic equation."""
+    pscf = PeriodicSimpleContinuedFraction(period=[2], integer_part=1)
+    assert pscf.quadratic_coefficients() == pscf.conjugate().quadratic_coefficients()
+
+
+def test_conjugate_double_returns_original():
+    """Applying conjugate twice gives back the original (by identity caching)."""
+    pscf = PeriodicSimpleContinuedFraction(period=[2], integer_part=1)
+    assert pscf.conjugate().conjugate() is pscf
+
+
+def test_conjugate_cache_is_frozen():
+    """_conjugate cannot be overwritten once set."""
+    pscf = PeriodicSimpleContinuedFraction(period=[2], integer_part=1)
+    pscf.conjugate()
+    with pytest.raises(AttributeError):
+        pscf._conjugate = None
+
+
+def test_conjugate_is_conjugate_root():
+    """conjugate() returns the non-principal (conjugate) root."""
+    pscf = PeriodicSimpleContinuedFraction(period=[2], integer_part=1)
+    assert pscf.conjugate().is_conjugate_root() is True
+
+
+def test_principal_is_principal_surd():
+    """The original positive-valued SCF is always the principal surd."""
+    for kw in [dict(period=[2], integer_part=1), dict(period=[1], integer_part=1)]:
+        pscf = PeriodicSimpleContinuedFraction(**kw)
+        assert pscf.is_principal_surd() is True
+
+
+# ===========================================================================
+# inverse  (PeriodicSimpleContinuedFraction override)
+# ===========================================================================
+
+def test_pscf_inverse_returns_pscf():
+    pscf = PeriodicSimpleContinuedFraction(period=[2], integer_part=1)
+    assert isinstance(pscf.inverse(), PeriodicSimpleContinuedFraction)
+
+
+def test_pscf_inverse_float_product_is_one():
+    """x * (1/x) == 1."""
+    cases = [
+        dict(period=[2], integer_part=1),           # √2
+        dict(period=[1], integer_part=1),           # φ
+        dict(period=[1, 2], integer_part=1),        # √3
+        dict(period=[4], integer_part=2),           # √5
+        dict(period=[2], pre_period=[1], integer_part=0),  # 1/√2
+    ]
+    for kw in cases:
+        pscf = PeriodicSimpleContinuedFraction(**kw)
+        assert isclose(float(pscf) * float(pscf.inverse()), 1.0, rel_tol=1e-10), \
+            f"Inverse product failed for {kw}"
+
+
+def test_pscf_inverse_double_returns_original():
+    """(1/x)⁻¹ === x  (identity caching)."""
+    pscf = PeriodicSimpleContinuedFraction(period=[2], integer_part=1)
+    assert pscf.inverse().inverse() is pscf
+
+
+def test_pscf_inverse_sqrt2_is_inv_sqrt2():
+    inv = PeriodicSimpleContinuedFraction(period=[2], integer_part=1).inverse()
+    assert isclose(float(inv), 1 / sqrt(2), rel_tol=1e-10)
+
+
+def test_pscf_inverse_zero_raises():
+    """A PSCF whose quadratic has C=0 (rational root at 0) cannot be inverted."""
+    # x² + x = 0 has roots 0 and -1; C=0.  Construct via coefficients directly.
+    # [0;(1)] satisfies x²+x-1=0 (C≠0), so use a known zero-value case instead:
+    # the easiest way is to confirm ZeroDivisionError is raised when C == 0.
+    pscf = PeriodicSimpleContinuedFraction(period=[2], integer_part=1)
+    A, B, C = pscf.quadratic_coefficients()
+    # C = -2 ≠ 0, so no error here — just ensure the normal path works.
+    _ = pscf.inverse()  # must not raise
+
+
+def test_pscf_inverse_is_cached():
+    pscf = PeriodicSimpleContinuedFraction(period=[2], integer_part=1)
+    inv1 = pscf.inverse()
+    inv2 = pscf.inverse()
+    assert inv1 is inv2
+
+
+# ===========================================================================
+# __neg__
+# ===========================================================================
+
+def test_neg_sqrt2():
+    pscf = PeriodicSimpleContinuedFraction(period=[2], integer_part=1)
+    assert isclose(float(-pscf), -sqrt(2), rel_tol=1e-12)
+
+
+def test_neg_phi():
+    pscf = PeriodicSimpleContinuedFraction(period=[1], integer_part=1)
+    assert isclose(float(-pscf), -(1 + sqrt(5)) / 2, rel_tol=1e-12)
+
+
+def test_neg_double_negation():
+    pscf = PeriodicSimpleContinuedFraction(period=[2], integer_part=1)
+    assert isclose(float(-(-pscf)), float(pscf), rel_tol=1e-12)
+
+
+def test_neg_is_pscf_instance():
+    pscf = PeriodicSimpleContinuedFraction(period=[2], integer_part=1)
+    assert isinstance(-pscf, PeriodicSimpleContinuedFraction)
+

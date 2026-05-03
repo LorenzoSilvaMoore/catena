@@ -56,8 +56,10 @@
 
 from fractions import Fraction
 from decimal import Decimal, InvalidOperation
+from math import isqrt
 
 from .core import euclidean_step, simplify
+from .quadratic import normalize_quadratic_surd
 
 type Rational = Fraction | tuple[int, int] | int
 
@@ -186,3 +188,47 @@ def from_decimal_to_rational(d: str) -> Rational:
         numerator = int(d)
         denominator = 1
     return numerator, denominator
+
+
+def from_quadratic_surd_to_scf(P: int, Q: int, D: int):
+    if Q == 0:
+        raise ValueError("Q cannot be zero")
+    if D < 0:
+        raise ValueError("D must be non-negative")
+    
+    P, Q, D = normalize_quadratic_surd(P, Q, D)
+
+    print(f"Normalized surd: ({P} + √{D}) / {Q}")
+
+    if (s:=isqrt(D))**2 == D:
+        raise ValueError("D must not be a perfect square")
+    
+    # s = D**0.5 # TODO: find a way to avoid floating point approximation here.
+    # s = s + 0.5
+
+    # if Q < 0:
+    #     P, Q, s = -P, -Q, -s
+
+    m, d = P, Q
+    a = (m + s) // d
+    if (m0:=(a * d - m)) > 0 and (d0:=(D - m0 * m0) // d) < 0: # This is a logic step to avoid the 
+        a -= 1                                                  # need to use floating point approximation for s.
+    
+    visited = dict()
+    scf = []
+    while (m, d) not in visited:
+        visited[(m, d)] = len(scf)
+        scf.append(a)
+
+        m = a * d - m
+        d = (D - m * m) // d
+        a = (m + s) // d
+
+        if (m0:=(a * d - m)) > 0 and (d0:=(D - m0 * m0) // d) < 0:
+            a -= 1
+
+    return scf[0], tuple(scf[1:visited[(m, d)]]), tuple(scf[visited[(m, d)]:])
+
+
+def from_quadratic_surd_to_conjugate_scf(P: int, Q: int, D: int):
+    return from_quadratic_surd_to_scf(-P, -Q, D)

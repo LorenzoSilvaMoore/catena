@@ -1,7 +1,7 @@
 """
 Core continued-fraction types.
 
-This module exposes two public classes:
+This module exposes three public classes:
 
 - :class:`SimpleContinuedFraction` — an infinite (or generative) simple
   continued fraction ``[a₀; a₁, a₂, …]`` where the partial quotients are
@@ -11,7 +11,15 @@ This module exposes two public classes:
 - :class:`FiniteSimpleContinuedFraction` — a finite SCF backed by a fixed
   sequence of partial quotients stored in a
   :class:`~catena.generators.FiniteGenerator`.  Provides factory methods to
-  construct instances directly from rationals, floats, or decimal strings.
+  construct instances directly from rationals, floats, or decimal strings,
+  and a :meth:`~FiniteSimpleContinuedFraction.to_decimal` method for exact
+  :class:`~decimal.Decimal` conversion.
+
+- :class:`PeriodicSimpleContinuedFraction` — a periodic SCF
+  ``[a₀; a₁, …, aₘ, (b₁, …, bₙ)]`` backed by a
+  :class:`~catena.generators.PeriodicGenerator`.  Provides
+  :meth:`~PeriodicSimpleContinuedFraction.quadratic_coefficients` to recover
+  the quadratic equation satisfied by its value.
 
 Convergent arithmetic
 ---------------------
@@ -19,13 +27,15 @@ The standard two-term recurrence is split into two layers:
 
 * ``tail_convergent(n)`` — computes the *n*-th convergent of the tail
   ``[a₁; a₂, …, aₙ₊₁]``, returning ``(numerator, denominator)``.
+  The sentinel cases ``n = -2`` and ``n = -1`` return the recurrence seeds
+  ``(1, 0)`` and ``(0, 1)`` respectively.
 * ``convergent(n)`` — lifts the tail convergent to the full SCF by
   incorporating the integer part ``a₀``.
 """
 
 from .cache import OrdinalCache, CacheHandler, SetLightCache
 
-from typing import Callable, Tuple, Optional
+from typing import Callable, Tuple, Optional, override
 from decimal import Decimal
 from collections.abc import Sequence
 
@@ -432,14 +442,22 @@ class SimpleContinuedFraction:
     
     def __setattr__(self, name, value):
         """
-        Guards the frozen attributes against reassignment after construction.
+        Guards frozen attributes against reassignment after construction.
+
+        ``_generator``, ``_cache_handler``, and ``tail_convergent`` are
+        permanently frozen.  ``_inverse`` is write-once: it can be set
+        exactly once (by :meth:`inverse`) and raises :exc:`AttributeError`
+        on any subsequent assignment.
 
         Raises:
             AttributeError: If ``name`` is one of ``_generator``,
-                ``_cache_handler``, or ``tail_convergent``.
+                ``_cache_handler``, or ``tail_convergent`` (always), or
+                ``_inverse`` after it has already been set.
         """
         if name in {"_generator", "_cache_handler", "tail_convergent"}:
             raise AttributeError(f"'{self.__class__.__name__}.{name}' is immutable and cannot be modified after initialization")
+        if name == "_inverse" and hasattr(self, "_inverse"):
+            raise AttributeError(f"'{self.__class__.__name__}._inverse' is write-once and has already been set")
         super().__setattr__(name, value)
 
     @property
@@ -501,6 +519,17 @@ class SimpleContinuedFraction:
             ``integer_part = self.integer_part + n``.
         """
         return self._from_shared(self, self._integer_part + n)
+    
+    def tail(self) -> 'SimpleContinuedFraction':
+        """
+        Returns the tail of the SCF, i.e. a new instance with the same
+        generator and convergent cache, but with ``integer_part = 0``.
+
+        The tail corresponds to the SCF obtained by removing the integer part
+        ``a₀`` from the original SCF, i.e. if ``x = [a₀; a₁, a₂, …]``, then
+        ``x.tail()`` is ``[0; a₁, a₂, …]``.
+        """
+        return self._from_shared(self, 0)
 
     def __int__(self) -> int:
         """Returns the integer part of the SCF."""
@@ -590,6 +619,41 @@ class SimpleContinuedFraction:
         """
         h, k = self.tail_convergent(n)
         return self.integer_part * k + h, k
+    
+    def inverse(self) -> 'SimpleContinuedFraction':
+        """
+        Returns the multiplicative inverse of the SCF, i.e. ``1/scf``.
+
+        Two cases arise from the standard inversion identity:
+
+        - If ``a₀ = 0``: ``x = [0; a₁, a₂, …]``, so
+          ``1/x = [a₁; a₂, a₃, …]`` — the inverse has
+          ``integer_part = a₁`` and the generator is shifted forward by one.
+        - If ``a₀ ≠ 0``: ``x = [a₀; a₁, a₂, …]``, so
+          ``1/x = [0; a₀, a₁, a₂, …]`` — the inverse has
+          ``integer_part = 0`` and the generator prepends ``a₀`` before
+          delegating to the original generator shifted back by one.
+
+        The result is cached in ``_inverse`` (write-once) and the inverse's
+        own ``_inverse`` is set back to ``self``, so calling ``inverse()``
+        twice returns the original object.
+
+        Returns:
+            SimpleContinuedFraction: The multiplicative inverse of this SCF.
+        """
+        if hasattr(self, '_inverse'): 
+            return self._inverse
+        
+        if self.integer_part == 0:
+            new_integer_part = self.generator(0)
+            new_generator = lambda n: self.generator(n + 1)
+        else:
+            new_integer_part = 0
+            new_generator = lambda n: self.generator(n - 1) if n > 0 else self.integer_part
+
+        self._inverse = SimpleContinuedFraction(generator=new_generator, integer_part=new_integer_part)
+        self._inverse._inverse = self   # Cache the inverse of the inverse as the original SCF
+        return self._inverse            # Make .inverse idempotent pair-wise while avoiding unecessary cloning.
         
     
 class FiniteSimpleContinuedFraction(SimpleContinuedFraction):
@@ -770,6 +834,31 @@ class FiniteSimpleContinuedFraction(SimpleContinuedFraction):
         """
         r = mathlib.convert.from_decimal_to_rational(d)
         return cls.from_rational(r)
+    
+    @override
+    def inverse(self) -> 'FiniteSimpleContinuedFraction':
+        """
+        Returns the multiplicative inverse of the finite SCF, i.e. ``1/scf``.
+
+        The result is a new :class:`FiniteSimpleContinuedFraction` whose
+        terminal convergent is the reciprocal of this SCF's terminal
+        convergent.
+
+        Returns:
+            FiniteSimpleContinuedFraction: The multiplicative inverse of this
+            finite SCF.
+        """
+        if hasattr(self, '_inverse'):
+            return self._inverse
+        
+        tc = self.terminal_convergent
+        if tc[0] == 0:
+            raise ZeroDivisionError("Cannot invert a zero value")
+        
+        r = mathlib.convert.from_rational_to_scf((tc[1], tc[0]))  # Invert the terminal convergent
+        self._inverse = FiniteSimpleContinuedFraction(partial_quotients=r[1], integer_part=r[0]) # This is necessary to have all internal attributes properly set for the inverse.
+        self._inverse._inverse = self 
+        return self._inverse
 
 
 class PeriodicSimpleContinuedFraction(SimpleContinuedFraction):
@@ -816,6 +905,11 @@ class PeriodicSimpleContinuedFraction(SimpleContinuedFraction):
         generator = PeriodicGenerator(period=period, pre_period=pre_period, dtypes=dtypes)
         super().__init__(generator=generator, integer_part=integer_part)
 
+    def __setattr__(self, name, value):
+        if name in {"_quadratic_coefficients", "_quadratic_surd", "_conjugate"} and hasattr(self, name):
+            raise AttributeError(f"'{self.__class__.__name__}.{name}' is immutable and cannot be modified after it has been set")
+        super().__setattr__(name, value)
+
     @property
     def generator(self) -> PeriodicGenerator:
         """The :class:`~catena.generators.PeriodicGenerator` holding the partial quotients."""
@@ -837,21 +931,38 @@ class PeriodicSimpleContinuedFraction(SimpleContinuedFraction):
     def __repr__(self):
         return f"PeriodicSimpleContinuedFraction(generator={self.generator}, integer_part={self.integer_part}, cache_handler={self.cache_handler})"
     
-    # def __float__(self):
-    #     """Returns the value of the SCF as a Python ``float``."""
-    #     A, B, C = self.quadratic_coefficients()
-    #     P = -B
-    #     D = B**2 - 4*A*C
-    #     Q = 2*A
-    #     return (P + D**0.5)/Q
+    def __float__(self):
+        """Returns the value of the SCF as a Python ``float``."""
+        P, Q, D = self.quadratic_surd()
+        return (P + D**0.5)/Q
+    
+    def __neg__(self):
+        """Returns the negation of the SCF, i.e. ``-scf``."""
+        # The special case of periodic SCFs allows to define a negation operation trivially.
+        # If the value of the SCF is (P + √D)/Q, then its negation is (-P - √D)/Q,
+        # or what is the same, (P + √D)/(-Q).
+        P, Q, D = self.quadratic_surd()
+        negated_surd = (P, -Q, D)
+        return self.from_quadratic_surd(*negated_surd)
 
-    # def __decimal__(self):
-    #     """Returns the value of the SCF as a :class:`decimal.Decimal`."""
-    #     A, B, C = self.quadratic_coefficients()
-    #     P = Decimal(-B)
-    #     D = Decimal(B)**2 - 4*Decimal(A)*Decimal(C)
-    #     Q = 2*Decimal(A)
-    #     return (P + D.sqrt())/Q
+    def as_decimal(self) -> Decimal:
+        """Returns the value of the SCF as a :class:`decimal.Decimal`."""
+        P, Q, D = self.quadratic_surd()
+        return (Decimal(P) + Decimal(D).sqrt())/Decimal(Q)
+
+    @classmethod
+    def from_quadratic_surd(cls, P: int, Q: int, D: int) -> 'PeriodicSimpleContinuedFraction':
+        """
+        Constructs a :class:`PeriodicSimpleContinuedFraction` from the parameters of a quadratic surd.
+
+        The value of the SCF is expressed as (P + √D)/Q where P, Q, D are integers satisfying:
+
+            A = Q/2
+            B = -P
+            C = (P² - D)/4
+        """
+        _int, pre_period, period = mathlib.convert.from_quadratic_surd_to_scf(P, Q, D)
+        return cls(pre_period=pre_period, period=period, integer_part=_int)
     
     def quadratic_coefficients(self) -> Tuple[int, int, int]:
         """
@@ -863,6 +974,9 @@ class PeriodicSimpleContinuedFraction(SimpleContinuedFraction):
             tuple[int, int, int]: The coefficients (A, B, C) of the
             quadratic equation.
         """
+        if hasattr(self, '_quadratic_coefficients'):
+            return self._quadratic_coefficients
+        
         A, B, C = self.generator.quadratic_coefficients()
         if self.integer_part != 0:
             # If a₀ is not zero, we need to adjust the coefficients to account for the shift in the value of the SCF.
@@ -873,12 +987,134 @@ class PeriodicSimpleContinuedFraction(SimpleContinuedFraction):
             # A·(x² - 2·a₀·x + a₀²) + B·x - B·a₀ + C = 0
             # -> A·x² + (B - 2·A·a₀)·x + (A·a₀² - B·a₀ + C) = 0
 
-            # Since A is garanteed to be positive, we can directly use it without worrying about the sign.
+            # Since for us A is garanteed to be positive, we can directly use it without worrying about the sign.
             # Likewiese, gdc(A, B, C) = 1, so we don't need to worry about simplifying the coefficients.
 
             A_adj = A
             B_adj = B - 2 * A * self.integer_part
             C_adj = C - B * self.integer_part + A * self.integer_part ** 2
+            self._quadratic_coefficients = (A_adj, B_adj, C_adj)
             return A_adj, B_adj, C_adj
         
+        self._quadratic_coefficients = (A, B, C)
         return A, B, C
+
+    def quadratic_surd(self) -> Tuple[int, int, int]:
+        """
+        Computes the (P, Q, D) parameters of the quadratic surd representation
+        of this periodic SCF.
+
+        The value of the SCF can be expressed as (P + √D)/Q where P, Q, D are
+        integers computed from the quadratic coefficients A, B, C as follows:
+
+            P = -B
+            D = B**2 - 4*A*C
+            Q = 2*A
+
+        Returns:
+            tuple[int, int, int]: The parameters (P, Q, D) of the
+            quadratic surd representation.
+        """
+        if hasattr(self, '_quadratic_surd'):
+            return self._quadratic_surd
+        
+        A, B, C = self.quadratic_coefficients()
+        P, Q, D = mathlib.quadratic.quadratic_surd_from_coefficients(A, B, C)
+
+        _int, pre_period, period = mathlib.convert.from_quadratic_surd_to_scf(P, Q, D)
+        if self.integer_part == _int and self.non_repeating_part == pre_period and self.period == period:
+            # If the original SCF is already in the normalized surd form, we can directly return the surd parameters without worrying about the sign.
+            self._quadratic_surd = (P, Q, D)
+            return self._quadratic_surd
+        else:
+            # Otherwise, the original SCF is itself the conjugate of the normalized surd form, so we need to negate the surd parameters to get the correct value.
+            self._quadratic_surd = (-P, -Q, D)
+            return self._quadratic_surd
+
+    def is_principal_surd(self) -> bool:
+        """
+        Checks if the value of this periodic SCF is the principal root of its quadratic equation.
+
+        The principal root of A·x² + B·x + C = 0 is the one with the positive square root in the surd representation (P + √D)/Q. 
+        If the value of this SCF corresponds to the negative square root (P - √D)/Q, then it is not the principal surd.
+
+        Returns:
+            bool: True if this SCF is the principal surd, False otherwise.
+        """
+        _, Q, _ = self.quadratic_surd()
+        return Q > 0
+
+    @override
+    def inverse(self) -> 'PeriodicSimpleContinuedFraction':
+        """
+        Returns the multiplicative inverse of the periodic SCF, i.e. ``1/scf``.
+
+        The result is a new :class:`PeriodicSimpleContinuedFraction` whose
+        value is the reciprocal of this SCF's value.
+
+        Returns:
+            PeriodicSimpleContinuedFraction: The multiplicative inverse of this
+            periodic SCF.
+        """
+        if hasattr(self, '_inverse'):
+            return self._inverse
+        
+        _, _, C = self.quadratic_coefficients()
+        if C == 0:
+            raise ZeroDivisionError("Cannot invert a zero value (rational root)")
+
+        P, Q, D = self.quadratic_surd()
+        if Q > 0: # Principal surd case
+            self._inverse = PeriodicSimpleContinuedFraction.from_quadratic_surd(-Q * P, -(P**2 - D), D * Q**2)
+        else: # Conjugate surd case
+            self._inverse = PeriodicSimpleContinuedFraction.from_quadratic_surd(Q * P, (P**2 - D), D * Q**2)
+
+        self._inverse._inverse = self  # Cache the inverse of the inverse as the original SCF
+        return self._inverse
+
+    def is_principal_surd(self) -> bool:
+        """
+        Checks if the value of this periodic SCF is the principal root of its quadratic equation.
+
+        The principal root of A·x² + B·x + C = 0 is the one with the positive square root in the surd representation (P + √D)/Q. 
+        If the value of this SCF corresponds to the negative square root (P - √D)/Q, then it is not the principal surd.
+
+        Returns:
+            bool: True if this SCF is the principal surd, False otherwise.
+        """
+        _, Q, _ = self.quadratic_surd()
+        return Q > 0
+
+    def is_conjugate_root(self) -> bool:
+        """
+        Checks if the value of this periodic SCF is the conjugate root of its quadratic equation.
+
+        The conjugate root of A·x² + B·x + C = 0 is the one with the negative square root in the surd representation (P - √D)/Q. 
+        If the value of this SCF corresponds to the positive square root (P + √D)/Q, then it is not the conjugate root.
+
+        Returns:
+            bool: True if this SCF is the conjugate root, False otherwise.
+        """
+        _, Q, _ = self.quadratic_surd()
+        return Q < 0
+
+    def conjugate(self) -> 'PeriodicSimpleContinuedFraction':
+        """
+        Returns the algebraic conjugate of the periodic SCF.
+
+        The algebraic conjugate of a root of A·x² + B·x + C = 0 is the other root of the same equation.
+        If the roots are x₁ = (P + √D)/Q and x₂ = (P - √D)/Q, then the conjugate is x₂.
+
+        Returns:
+            PeriodicSimpleContinuedFraction: The algebraic conjugate of this
+            periodic SCF.
+        """
+        if hasattr(self, '_conjugate'):
+            return self._conjugate
+
+        P, Q, D = self.quadratic_surd()
+        P_conj, Q_conj = -P, -Q
+        self._conjugate = PeriodicSimpleContinuedFraction.from_quadratic_surd(P_conj, Q_conj, D)
+        self._conjugate._conjugate = self
+
+        return self._conjugate

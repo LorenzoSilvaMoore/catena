@@ -38,6 +38,52 @@ and are best rational approximations to the value being expanded.
 
 ---
 
+## Why catena?
+
+Existing Python libraries for continued fractions tend to focus on the finite,
+rational case.  For example,
+[`continuedfractions`](https://continuedfractions.readthedocs.io/) is a
+well-designed object-oriented library that extends `fractions.Fraction` to cover
+finite SCFs and related objects such as Farey sequences and mediants — but its
+scope is explicitly limited to rationals.  Many other packages take an even more
+procedural approach, exposing functions that operate on lists of coefficients
+rather than first-class objects.
+
+`catena` starts from the general, countably infinite definition.  A
+`SimpleContinuedFraction` is driven by a generator callable that produces
+partial quotients on demand — so an infinite expansion like $\sqrt{2}$ or $e$
+is represented by a small, fixed-size object regardless of how many convergents
+you compute.  Convergents are memoised as they are requested; you pay only for
+what you use, and the cache is shared transparently when the same tail is viewed
+with a different integer part.
+
+`catena` also does not subclass `fractions.Fraction`.  Convergents produced by
+the two-term recurrence are guaranteed to be in lowest terms — consecutive
+convergents satisfy $p_n q_{n-1} - p_{n-1} q_n = \pm 1$, so $\gcd(p_n, q_n) = 1$
+always holds.  `fractions.Fraction` normalises every result through a GCD
+reduction regardless, which means wrapping convergents in it would pay a cost
+that buys nothing.  Instead, `catena` stores numerator/denominator pairs as
+plain `(int, int)` tuples and implements only the arithmetic operations it
+actually needs, with targeted GCD reductions where they are genuinely required
+(e.g. when adding two finite SCFs).
+
+The long-term goal is to build on this foundation a high-level API for concrete
+applications of continued fraction theory:
+
+- **Best rational approximations** — direct extraction from the convergent sequence.
+- **Quadratic irrationals and periodic SCFs** — representation and arithmetic for
+  numbers of the form $(P + \sqrt{D})/Q$, including normalisation and
+  conjugation.
+- **Pell's equation** — solutions via the periodic expansion of $\sqrt{D}$.
+- **Farey sequences and mediants** — enumeration of rationals and their
+  geometric interpretation as rational points in the plane.
+- **Transcendental constants** — generalized continued fraction expansions for
+  $e^x$, $\tanh(1/n)$, $\tan(n)$, Bessel functions, and related sequences.
+- **Fibonacci-type sequences** — structural connections between convergents and
+  linear recurrences.
+
+---
+
 ## Installation
 
 ```bash
@@ -215,6 +261,26 @@ FiniteSimpleContinuedFraction(partial_quotients, integer_part=0, dtype=None)
 
 ### `catena.cache`
 
+`functools.lru_cache` / `functools.cache` bind the cache to a single function
+with no public API to extract or share the underlying store.  `catena` needs
+the cache to be an explicit, first-class object for three reasons:
+
+- **Shareability.**  Two SCF instances with the same tail (e.g. `phi` and
+  `phi + 2` after an integer shift) should share a single convergent cache.
+  The same applies to an expensive recursive generator used by several SCFs —
+  the computation should be paid once, not once per instance.
+- **Pruning.**  `CacheHandler.prune_cache(n)` drops all entries below index
+  `n`, letting callers free memory mid-computation without discarding the
+  handler or its references.
+- **Coherent reset.**  `CacheHandler.reset_cache()` clears the store while
+  keeping the same handler object alive.  Because every SCF that shares a tail
+  holds a reference to the same `CacheHandler`, a single reset is visible to
+  all of them simultaneously — something that is impossible when the cache is
+  private to each decorated function.
+
+`CacheHandler` owns the underlying store and exposes it; `SetLightCache` and
+`SetCache` are thin wrappers that delegate to it.
+
 | Symbol | Description |
 |--------|-------------|
 | `Cache` | Append-only `UserDict`; raises `KeyError` if an existing key is overwritten |
@@ -309,6 +375,14 @@ pytest testing/
 The test suite uses a binary large-integer store (`testing/store/`) for
 expensive pre-computed values.  It is rebuilt automatically when
 `conftest._PRECOMPUTED` changes.
+
+---
+
+## Contributing
+
+Contributions are welcome.  See [CONTRIBUTING.md](CONTRIBUTING.md) for
+guidelines on setting up the development environment, running the test suite,
+and the conventions used across the project.
 
 ---
 

@@ -756,3 +756,66 @@ def test_sqrt2_convergents_satisfy_pell_equation():
     for n in range(scf.size):
         p, q = scf.convergent(n)
         assert abs(p * p - 2 * q * q) == 1
+
+
+# ---------------------------------------------------------------------------
+# inverse()  (FiniteSimpleContinuedFraction override)
+#
+# The inverse of the rational p/q is q/p.  The result is a new
+# FiniteSimpleContinuedFraction whose terminal convergent is (q, p).
+#
+# References:
+#   22/7  = [3; 7]       →  inverse 7/22  = [0; 3, 7]
+#   3/7   = [0; 2, 3]    →  inverse 7/3   = [2; 3]
+#   1/2   = [0; 2]       →  inverse 2/1   = [2]
+#   7/5   = [1; 2, 2]    →  inverse 5/7   = [0; 1, 2, 2]
+# ---------------------------------------------------------------------------
+
+def test_inverse_22_over_7():
+    scf = FiniteSimpleContinuedFraction([7], integer_part=3)      # 22/7
+    inv = scf.inverse()
+    assert isinstance(inv, FiniteSimpleContinuedFraction)
+    p, q = inv.terminal_convergent
+    assert (p, q) == (7, 22)
+
+
+def test_inverse_3_over_7():
+    scf = FiniteSimpleContinuedFraction([2, 3], integer_part=0)   # 3/7
+    inv = scf.inverse()
+    p, q = inv.terminal_convergent
+    assert (p, q) == (7, 3)
+
+
+def test_inverse_1_over_2():
+    scf = FiniteSimpleContinuedFraction([2], integer_part=0)       # 1/2
+    inv = scf.inverse()
+    p, q = inv.terminal_convergent
+    assert (p, q) == (2, 1)
+
+
+def test_inverse_is_finite_scf():
+    scf = FiniteSimpleContinuedFraction([7], integer_part=3)
+    assert isinstance(scf.inverse(), FiniteSimpleContinuedFraction)
+
+
+def test_inverse_double_returns_original_value():
+    """(1/x)⁻¹ has the same terminal convergent as x."""
+    scf = FiniteSimpleContinuedFraction([7, 16], integer_part=3)   # 355/113
+    inv = scf.inverse()
+    double_inv = inv.inverse()
+    assert double_inv.terminal_convergent == scf.terminal_convergent
+
+
+def test_inverse_double_is_cached_original():
+    """(1/x)⁻¹ is the same object as x (identity caching)."""
+    scf = FiniteSimpleContinuedFraction([7], integer_part=3)
+    assert scf.inverse().inverse() is scf
+
+
+def test_inverse_zero_raises():
+    scf = FiniteSimpleContinuedFraction([1], integer_part=0)   # 0 + 1/1 = 1? No: terminal = (1,1) not 0
+    # The only finite SCF with value 0 is integer_part=0 and size=0.
+    zero_scf = FiniteSimpleContinuedFraction([], integer_part=0)
+    with pytest.raises(ZeroDivisionError):
+        zero_scf.inverse()
+
