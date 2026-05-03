@@ -7,6 +7,97 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ---
 
+## [0.2.0] — 2026-05-03
+
+### Added
+
+#### Quadratic-irrational support (`catena.catena`)
+
+- `PeriodicSimpleContinuedFraction` — new methods for algebraic evaluation and
+  manipulation of periodic SCFs as quadratic surds $(P + \sqrt{D})\,/\,Q$:
+  - `quadratic_surd()` — derives $(P, Q, D)$ from the quadratic coefficients;
+    detects which root the SCF represents by round-tripping through the
+    conversion algorithm.  Cached write-once in `_quadratic_surd`.
+  - `is_principal_surd()` / `is_conjugate_root()` — classify the root by the
+    sign of $Q$.
+  - `conjugate()` — returns the algebraic conjugate (the other root of the same
+    quadratic); cached write-once in `_conjugate`; double application returns
+    the original object.
+  - `inverse()` (override) — inverts via the reversed quadratic
+    $C x^2 + B x + A = 0$, selects the correct root based on
+    `is_principal_surd()`, and caches write-once in `_inverse`.
+  - `from_quadratic_surd(P, Q, D)` (classmethod) — constructs a
+    `PeriodicSimpleContinuedFraction` directly from surd parameters.
+  - `__float__` and `as_decimal()` — evaluate the surd exactly.
+  - `__neg__` — negates by flipping the sign of $Q$.
+  - `__setattr__` extended with freeze guards for `_quadratic_coefficients`,
+    `_quadratic_surd`, and `_conjugate`.
+  - `quadratic_coefficients()` now caches its result on first call.
+
+- `SimpleContinuedFraction`:
+  - `tail()` — returns a new instance sharing the generator and cache but with
+    `integer_part = 0`.
+  - `inverse()` — constructs the multiplicative inverse.  When $a_0 = 0$ the
+    generator is shifted forward by one; otherwise $a_0$ is prepended and the
+    generator shifts back.  Cached write-once in `_inverse`; calling `inverse()`
+    twice returns the original object.
+  - `__setattr__` extended to enforce write-once semantics on `_inverse`.
+
+- `FiniteSimpleContinuedFraction`:
+  - `inverse()` (override) — inverts the terminal convergent
+    $(p, q) \to (q, p)$ and constructs the new finite SCF via
+    `from_rational_to_scf`.  Raises `ZeroDivisionError` for the zero value.
+
+#### New module: `catena.mathlib.quadratic`
+
+- `_square_part_sqrt(D)` — largest $s$ such that $s^2 \mid D$.
+- `simplify_quadratic_surd(P, Q, D)` — reduce by the common factor
+  $g = \gcd(P,\,Q,\,\text{sqpart}(D))$; preserves signs.
+- `normalize_quadratic_surd(P, Q, D)` — scale so that $Q \mid (D - P^2)$;
+  required by the SCF expansion algorithm.
+- `quadratic_roots_from_coefficients(A, B, C)` — both real roots of
+  $Ax^2+Bx+C=0$ as `Decimal` values ($x_0 \geq x_1$), or `None` if $\Delta < 0$.
+- `quadratic_surd_from_coefficients(A, B, C)` — canonical surd form $(P, Q, D)$
+  with $Q > 0$, after GCD reduction.
+
+#### New functions: `catena.mathlib.convert`
+
+- `from_quadratic_surd_to_scf(P, Q, D)` — expands $(P + \sqrt{D})\,/\,Q$ into
+  `(integer_part, pre_period, period)` using an integer-only Euclidean
+  algorithm; avoids floating-point for the floor step.
+- `from_quadratic_surd_to_conjugate_scf(P, Q, D)` — thin wrapper that negates
+  both $P$ and $Q$ before delegating to the above.
+
+#### Test suite
+
+- 115 new tests; 541 total, all passing.
+- `testing/test_math_quadratic.py` (new) — full coverage of `mathlib.quadratic`
+  and the two new `convert` helpers: known values, structural invariants
+  (Vieta's formulas, value preservation, divisibility condition), error cases.
+- `testing/test_periodic_scf.py` — added sections for `quadratic_surd`,
+  `is_principal_surd`/`is_conjugate_root`, `__float__`, `as_decimal`,
+  `from_quadratic_surd`, `conjugate`, `inverse`, and `__neg__`.
+- `testing/test_scf.py` — added sections for `tail()` and `inverse()`,
+  including write-once protection and the double-inverse identity.
+- `testing/test_finite_scf.py` — added `inverse()` tests with known rational
+  values, double-inverse caching, and `ZeroDivisionError` for zero input.
+
+### Changed
+
+- `catena/generators.py` module docstring updated to reflect four generator
+  types (was three).
+
+### Documentation
+
+- `README.md` — added "Why catena?" rationale section; added cache design
+  rationale; added pointer to `CONTRIBUTING.md`.
+- `CONTRIBUTING.md` (new) — development setup, test-running instructions, and
+  code conventions.
+- `testing/README.md` — clarified that `store/*.dat` and `store/*.hash` are
+  not git-tracked.
+
+---
+
 ## [0.1.0.post1] — 2026-04-30
 
 ### Changed
