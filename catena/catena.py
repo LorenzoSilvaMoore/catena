@@ -42,22 +42,6 @@ from collections.abc import Sequence
 from .generators import Generator, FiniteGenerator, PeriodicGenerator
 import catena.mathlib as mathlib
 
-# IntPair = tuple[int, int]
-# IntTriplet = tuple[int, int, int]
-# FloatAsStr = str
-
-# CacheHandler = Any
-# Cache = Any
-# SetCache = Any
-
-# def get_sign(n: int) -> int:
-#     if n > 0:
-#         return 1
-#     elif n < 0:
-#         return -1
-#     else:
-#         return 0
-
 # class Method:
     
 #     @staticmethod
@@ -163,88 +147,7 @@ import catena.mathlib as mathlib
 
 
 # class FinateSimpleContinuedFraction:
-#     def __init__(self, head: int = 0, body: Iterable[int] = None, frac: Optional[IntPair] = None):
-#         if isinstance(head, Iterable):
-#             frac = tuple(head)
-
-#         if frac is not None:
-#             head, body = Convert.from_rational_to_scf(*frac)
-#         else:
-#             if not body:
-#                 body = (1,)
-
-#         super().__setattr__("_head", int(head)) 
-#         super().__setattr__("_body", tuple(body))
-#         super().__setattr__("_cache_handler", CacheHandler(Cache()))
-#         super().__setattr__("_size", len(self.body))
-#         self._str_length = 256
-#         self._head = int(head)
-
-#         self.convergent = SetLightCache(self.cache_handler, self._convergent)
-    
-#     @property
-#     def head(self) -> int:
-#         return self._head
-    
-#     @head.setter
-#     def head(self, n: int):
-#         if not isinstance(n, int):
-#             raise TypeError(f"Expected {type(1)} for '{self.__class__.__name__}.head' but got {type(n)}")
-#         self._head = n
-
-#     @property
-#     def str_length(self) -> int:
-#         return self._str_length
-    
-#     @str_length.setter
-#     def str_length(self, n: int):
-#         if not isinstance(n, int):
-#             raise TypeError(f"Expected {type(1)} for '{self.__class__.__name__}.str_length' but got {type(n)}")
-#         self._str_length = n
-    
-#     @property
-#     def body(self) -> tuple:
-#         return self._body
-    
-#     @property
-#     def cache_handler(self) -> CacheHandler:
-#         return self._cache_handler
-    
-#     @property
-#     def cache(self) -> Cache:
-#         return self._cache_handler.cache
-    
-#     @property
-#     def size(self) -> int:
-#         return self._size
-
-#     def __setattr__(self, key, value):
-#         if key in {"_body", "_cache_handler", "_size"}:
-#             raise AttributeError(f"'{self.__class__.__name__}.{key}' is immutable and cannot be modified after initialization")
-#         super().__setattr__(key, value)
-
-#     def __len__(self):
-#         return self.size+1
-    
-#     def _convergent(self, n: int) -> IntPair:
-#         if n >= self.size:
-#             n = self.size - 1
-#             return self.convergent(n)
-#         if n < 0:
-#             raise RecursionError("A negative value has been reached at runtime")
-
-#         if n == 0:
-#             p, q = 1, self.body[0]
-#         elif n == 1:
-#             p, q = self.body[1], self.body[0] * self.body[1] + 1
-#         else:
-#             m1, m2, a = self.convergent(n-1), self.convergent(n-2), int(self.body[n])
-#             p, q = m1[0] * a + m2[0], m1[1] * a + m2[1]
-
-#         return (p, q)
-    
-#     def aftermost_convergent(self) -> IntPair:
-#         return self.convergent(self.size - 1)
+#    
     
 #     def convergent_as_float(self, n: Optional[int]=None) -> IntPair:
 #         if n is None:
@@ -555,22 +458,38 @@ class SimpleContinuedFraction:
             return NotImplemented
         return self.shift(n)
     
+    def __float__(self):
+        """
+        Converts the SCF to a float by evaluating the 50-th convergent.
+
+        Note: This is a heuristic choice for a large enough convergent 
+        to give good enough precision. 64-bit floats have a precision 
+        of about 15-17 decimal digits, and the denominator of the 45-th 
+        convergent is usually big enough to ensure that onwards there
+        is no distinction between the convergents at float precision.
+        """
+        p, q = self.convergent(50)
+        return p / q
+    
     def tail_convergent(self, n: int) -> Tuple[int, int]:
         """
         Computes the *n*-th convergent of the tail ``[a₁; a₂, …, aₙ₊₁]``.
 
         Uses the standard two-term recurrence::
 
-            h₋₁ = 1,  h₀ = a₁
-            k₋₁ = 0,  k₀ = 1          (implicit via base cases below)
-            hₙ = aₙ₊₁·hₙ₋₁ + hₙ₋₂
+            h₋₂ = 1,  k₋₂ = 0
+            h₋₁ = 0,  k₋₁ = 1
+            hₙ = aₙ₊₁·hₙ₋₁ + hₙ₋₂     (n ≥ 0, aₙ₊₁ = generator(n))
             kₙ = aₙ₊₁·kₙ₋₁ + kₙ₋₂
+
+        In particular: ``h₀ = 1``, ``k₀ = a₁ = generator(0)``.
 
         Results are memoised by :class:`~catena.cache.SetLightCache`.
 
         Args:
-            n (int): 0-indexed depth.  ``n=0`` gives the first convergent
-                ``1/a₁``; ``n=1`` gives ``a₂/(a₁·a₂ + 1)``; etc.
+            n (int): 0-indexed depth.  ``n=-2`` and ``n=-1`` return the
+                recurrence seeds ``(1, 0)`` and ``(0, 1)``; ``n=0`` gives
+                ``(1, a₁)``; ``n=1`` gives ``(a₂, a₁·a₂ + 1)``; etc.
 
         Returns:
             tuple[int, int]: ``(numerator, denominator)`` of the tail
@@ -582,22 +501,45 @@ class SimpleContinuedFraction:
         """
         if n < -2:
             raise RecursionError("A negative value has been reached at runtime")
-        
+
+        # Base cases — never cached; returned directly so they never enter the
+        # OrdinalCache and do not distort the frontier (largest_key).
         if n == -2:
-            return 1, 0  # h₋₂ = 0, k₋₂ = 1
-        
+            return 1, 0  # h₋₂ = 1, k₋₂ = 0
         if n == -1:
-            return 0, 1  # h₋₁ = 1, k₋₁ = 0
+            return 0, 1  # h₋₁ = 0, k₋₁ = 1
         
         if n == 0:
-            return 1, self.generator(0)
-        
-        elif n == 1:
-            return self.generator(1), self.generator(0) * self.generator(1) + 1
-        
-        else:
-            m1, m2, a = self.tail_convergent(n-1), self.tail_convergent(n-2), int(self.generator(n))
-            return m1[0] * a + m2[0], m1[1] * a + m2[1]
+            return 1, self.generator(0)  # h₀ = 1, k₀ = a₁
+
+        # Iterative fill: advance from the current cache frontier to n.
+        # OrdinalCache.largest_key gives the highest index already stored,
+        # so we only compute the truly missing entries — O(gap) work and
+        # O(1) stack depth regardless of n.
+        # Clamp start to 0: base-case seeds (n=-2, n=-1) may have been stored
+        # in the cache by the SetLightCache wrapper when called directly, which
+        # would corrupt the frontier if we started below 0.
+        cache = self.cache_handler.cache
+        lk = cache.largest_key
+        start = 0 if (lk is None or lk < 0) else lk + 1
+
+        if start > n:
+            # n is already cached; the SetLightCache wrapper will have
+            # returned before reaching here, but guard for direct calls.
+            return cache[n]
+
+        # Seed the two values needed to begin the loop.
+        prev2 = cache[start - 2] if start - 2 in cache else self.tail_convergent(start - 2)
+        prev1 = cache[start - 1] if start - 1 in cache else self.tail_convergent(start - 1)
+
+        for i in range(start, n + 1):
+            a = int(self.generator(i))
+            curr = (a * prev1[0] + prev2[0], a * prev1[1] + prev2[1])
+            if i < n:
+                cache[i] = curr  # write intermediates directly; wrapper writes n
+            prev2, prev1 = prev1, curr
+
+        return prev1
         
     def convergent(self, n: int) -> Tuple[int, int]:
         """
@@ -654,6 +596,23 @@ class SimpleContinuedFraction:
         self._inverse = SimpleContinuedFraction(generator=new_generator, integer_part=new_integer_part)
         self._inverse._inverse = self   # Cache the inverse of the inverse as the original SCF
         return self._inverse            # Make .inverse idempotent pair-wise while avoiding unecessary cloning.
+    
+    def segment(self, n: int) -> 'FiniteSimpleContinuedFraction':
+        """
+        Returns a finite SCF segment of the first ``n`` partial quotients.
+
+        The result is a :class:`FiniteSimpleContinuedFraction` with
+        ``integer_part = self.integer_part`` and
+        ``partial_quotients = (self.generator(0), self.generator(1), …, self.generator(n-1))``.
+
+        Args:
+            n (int): The number of partial quotients to include in the segment.
+
+        Returns:
+            FiniteSimpleContinuedFraction: A finite SCF segment of the first
+            ``n`` partial quotients.
+        """
+        return FiniteSimpleContinuedFraction(partial_quotients=tuple(self.generator(i) for i in range(n)), integer_part=self.integer_part)
         
     
 class FiniteSimpleContinuedFraction(SimpleContinuedFraction):
@@ -859,6 +818,35 @@ class FiniteSimpleContinuedFraction(SimpleContinuedFraction):
         self._inverse = FiniteSimpleContinuedFraction(partial_quotients=r[1], integer_part=r[0]) # This is necessary to have all internal attributes properly set for the inverse.
         self._inverse._inverse = self 
         return self._inverse
+    
+    @override
+    def segment(self, n: int) -> 'FiniteSimpleContinuedFraction':
+        """
+        Returns a segment of the first ``n`` partial quotients.
+
+        For a finite SCF, this is effectively a truncation.  The result is a
+        new :class:`FiniteSimpleContinuedFraction` with
+        ``integer_part = self.integer_part`` and
+        ``partial_quotients = (self.generator(0), self.generator(1), …, self.generator(n-1))``.
+
+        Args:
+            n (int): The number of partial quotients to include in the segment. If ``n >= size``, 
+            the entire SCF is returned without truncation.
+
+        Returns:
+            FiniteSimpleContinuedFraction: A finite SCF segment of the first
+            ``n`` partial quotients.
+
+        Raises:
+            IndexError: If ``n`` exceeds the size of the finite SCF.
+        """
+        if n > self.size:
+            raise IndexError(f"Segment length n={n} exceeds the size of the finite SCF (size={self.size})")
+        
+        if n == self.size:
+            return self.shift(0)  # Return a new instance with the same content to ensure immutability of the original SCF
+        
+        return super().segment(n)
 
 
 class PeriodicSimpleContinuedFraction(SimpleContinuedFraction):

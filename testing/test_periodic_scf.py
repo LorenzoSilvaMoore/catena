@@ -893,6 +893,17 @@ def test_pscf_inverse_is_cached():
     inv2 = pscf.inverse()
     assert inv1 is inv2
 
+# ===========================================================================
+# segment(n)
+# ===========================================================================
+
+def test_segment_returns_finite_scf():
+    from catena import FiniteSimpleContinuedFraction
+    pscf = PeriodicSimpleContinuedFraction(period=[2], integer_part=1)
+    seg = pscf.segment(3)
+    assert isinstance(seg, FiniteSimpleContinuedFraction)
+    assert seg.size == 3
+
 
 # ===========================================================================
 # __neg__

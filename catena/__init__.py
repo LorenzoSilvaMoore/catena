@@ -20,6 +20,7 @@ except PackageNotFoundError:
     __version__ = None  # package not installed (e.g. running from source)
 
 from . import mathlib
+from . import strings
 
 from .catena import (
     SimpleContinuedFraction,

@@ -7,6 +7,30 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- `SimpleContinuedFraction.__float__`: converts to `float` via `convergent(50)`,
+  sufficient to exhaust 64-bit float precision for all standard generators.
+- `SimpleContinuedFraction.segment(n)`: returns a `FiniteSimpleContinuedFraction`
+  of the first *n* partial quotients with an independent cache.
+- `FiniteSimpleContinuedFraction.segment(n)`: truncation override — shares the
+  cache when `n == size`, creates an independent copy when `n < size`, raises
+  `IndexError` when `n > size`.
+
+### Changed
+
+- **`tail_convergent` recurrence indexation** shifted to match standard
+  literature: seeds are now `(h_{-2}, k_{-2}) = (1, 0)` and
+  `(h_{-1}, k_{-1}) = (0, 1)`, so `h_0 = 1`, `k_0 = a_1`.
+- **`tail_convergent` implementation** rewritten from top-down recursion to an
+  iterative forward fill, advancing from `OrdinalCache.largest_key` to *n*.
+  Stack depth is now O(1) regardless of *n*; `RecursionError` on large indices
+  is no longer possible.
+
+---
+
 ## [0.2.0] — 2026-05-03
 
 ### Added

@@ -5,6 +5,8 @@ from fractions import Fraction
 from sympy.ntheory import continued_fraction_periodic, continued_fraction_convergents, continued_fraction_reduce
 from math import gcd, isqrt
 
+from random import randint, random, shuffle
+
 def periodic_scf_to_quadratic(cycle: list[int]) -> tuple[int, int, int]:
     """Given the periodic part and optional pre-period of a simple continued fraction, return the coefficients of the corresponding quadratic polynomial."""
     k = len(cycle)
@@ -64,6 +66,34 @@ def _square_part_sqrt(D: int) -> int:
         s *= p ** (count // 2)
         p += 1
     return s
+
+def random_fscf() -> catena.FiniteSimpleContinuedFraction:
+    """Generates a random finite simple continued fraction."""
+    small_lo = randint(1, 3)
+    small_coefficients = (randint(1, small_lo) for _ in range(randint(60,80)))
+    large_lo = randint(17, 100)
+    large_coefficients = ()
+    if randint(0, 1) == 0:
+        large_coefficients = (randint(1, large_lo) for _ in range(randint(10, 20)))
+
+    int_part = randint(-10, 10)
+    #shuffle the coefficients
+    coefficients = list(small_coefficients) + list(large_coefficients)
+    shuffle(coefficients)
+    return catena.FiniteSimpleContinuedFraction(coefficients, integer_part=int_part)
+
+
+def find_plateau_order(fscf: catena.FiniteSimpleContinuedFraction) -> int:
+    """Finds the order of at which the floating-point approximation of the convergents of a finite simple continued fraction stabilizes."""
+    prev_approx = None
+    for n in range(1, 1000):
+        c = fscf.convergent(n)
+        approx = float(Decimal(c[0]) / Decimal(c[1]))
+        if prev_approx is not None and approx == prev_approx:
+            return n
+        prev_approx = approx
+    return -1  # Return -1 if no plateau is found within the first 1000 convergents
+
 
 if __name__ == "__main__":
     # sqer(14) = [3; 1, 2, 1, 6, 1, 2, 1, 6, ...]
@@ -369,64 +399,95 @@ if __name__ == "__main__":
     #         # print(f"from_quadratic_surd_to_conjugate_scf: {result2}  [{(t2-t1)*1e6:.2f} µs]")
     #         # print(f"continued_fraction_periodic (s=-1):   {result4}  [{(t4-t3)*1e6:.2f} µs]")
 
-    pscf = catena.PeriodicSimpleContinuedFraction(period=[3, 8, 3, 34], pre_period=[1, 36], integer_part=0)
-    print(f"PSCF: {pscf}")
-    print(f"PSCF as decimal: {pscf.convergent(100)[0] / pscf.convergent(100)[1]}")
-    print(f"PSCF quadratic coefficients: {pscf.quadratic_coefficients()}")
-    print(f"PSCF surd form: {pscf.quadratic_surd()}")
+    # pscf = catena.PeriodicSimpleContinuedFraction(period=[3, 8, 3, 34], pre_period=[1, 36], integer_part=0)
+    # print(f"PSCF: {pscf}")
+    # print(f"PSCF as decimal: {pscf.convergent(100)[0] / pscf.convergent(100)[1]}")
+    # print(f"PSCF quadratic coefficients: {pscf.quadratic_coefficients()}")
+    # print(f"PSCF surd form: {pscf.quadratic_surd()}")
 
-    conjugate = pscf.conjugate()
-    print(f"Conjugate of PSCF: {conjugate}")
-    print(f"Conjugate of PSCF as decimal: {conjugate.convergent(100)[0] / conjugate.convergent(100)[1]}")
-    print(f"Conjugate of PSCF quadratic coefficients: {conjugate.quadratic_coefficients()}")
-    print(f"Conjugate of PSCF surd form: {conjugate.quadratic_surd()}")
+    # conjugate = pscf.conjugate()
+    # print(f"Conjugate of PSCF: {conjugate}")
+    # print(f"Conjugate of PSCF as decimal: {conjugate.convergent(100)[0] / conjugate.convergent(100)[1]}")
+    # print(f"Conjugate of PSCF quadratic coefficients: {conjugate.quadratic_coefficients()}")
+    # print(f"Conjugate of PSCF surd form: {conjugate.quadratic_surd()}")
     
-    inverse = pscf.inverse()
-    print(f"Inverse of PSCF: {inverse}")
-    print(f"Inverse of PSCF as decimal: {inverse.convergent(100)[0] / inverse.convergent(100)[1]}")
-    print(f"Inverse of PSCF quadratic coefficients: {inverse.quadratic_coefficients()}")
-    print(f"Inverse of PSCF surd form: {inverse.quadratic_surd()}")
+    # inverse = pscf.inverse()
+    # print(f"Inverse of PSCF: {inverse}")
+    # print(f"Inverse of PSCF as decimal: {inverse.convergent(100)[0] / inverse.convergent(100)[1]}")
+    # print(f"Inverse of PSCF quadratic coefficients: {inverse.quadratic_coefficients()}")
+    # print(f"Inverse of PSCF surd form: {inverse.quadratic_surd()}")
 
-    inverse_conjugate = inverse.conjugate()
-    print(f"Conjugate of the inverse of PSCF: {inverse_conjugate}")
-    print(f"Conjugate of the inverse of PSCF as decimal: {inverse_conjugate.convergent(100)[0] / inverse_conjugate.convergent(100)[1]}")
-    print(f"Conjugate of the inverse of PSCF quadratic coefficients: {inverse_conjugate.quadratic_coefficients()}")
-    print(f"Conjugate of the inverse of PSCF surd form: {inverse_conjugate.quadratic_surd()}")
+    # inverse_conjugate = inverse.conjugate()
+    # print(f"Conjugate of the inverse of PSCF: {inverse_conjugate}")
+    # print(f"Conjugate of the inverse of PSCF as decimal: {inverse_conjugate.convergent(100)[0] / inverse_conjugate.convergent(100)[1]}")
+    # print(f"Conjugate of the inverse of PSCF quadratic coefficients: {inverse_conjugate.quadratic_coefficients()}")
+    # print(f"Conjugate of the inverse of PSCF surd form: {inverse_conjugate.quadratic_surd()}")
 
     
     
-    # pscf2 = catena.PeriodicSimpleContinuedFraction(period=(8, 3, 34, 3), pre_period=(1, 1, 1, 2), integer_part=0)
-    # print(f"PSCF 2: {pscf2}")
-    # print(f"PSCF 2 as decimal: {pscf2.convergent(100)[0] / pscf2.convergent(100)[1]}")
-    # print(f"PSCF 2 quadratic coefficients: {pscf2.quadratic_coefficients()}")
-    # print(f"PSCF 2 surd form: {pscf2.quadratic_surd()}")
+    # # pscf2 = catena.PeriodicSimpleContinuedFraction(period=(8, 3, 34, 3), pre_period=(1, 1, 1, 2), integer_part=0)
+    # # print(f"PSCF 2: {pscf2}")
+    # # print(f"PSCF 2 as decimal: {pscf2.convergent(100)[0] / pscf2.convergent(100)[1]}")
+    # # print(f"PSCF 2 quadratic coefficients: {pscf2.quadratic_coefficients()}")
+    # # print(f"PSCF 2 surd form: {pscf2.quadratic_surd()}")
 
-    # conjugate_pscf2 = pscf2.conjugate()
-    # print(f"Conjugate of PSCF 2: {conjugate_pscf2}")
-    # print(f"Conjugate of PSCF 2 as decimal: {conjugate_pscf2.convergent(100)[0] / conjugate_pscf2.convergent(100)[1]}")
-    # print(f"Conjugate of PSCF 2 quadratic coefficients: {conjugate_pscf2.quadratic_coefficients()}")
-    # print(f"Conjugate of PSCF 2 surd form: {conjugate_pscf2.quadratic_surd()}")
+    # # conjugate_pscf2 = pscf2.conjugate()
+    # # print(f"Conjugate of PSCF 2: {conjugate_pscf2}")
+    # # print(f"Conjugate of PSCF 2 as decimal: {conjugate_pscf2.convergent(100)[0] / conjugate_pscf2.convergent(100)[1]}")
+    # # print(f"Conjugate of PSCF 2 quadratic coefficients: {conjugate_pscf2.quadratic_coefficients()}")
+    # # print(f"Conjugate of PSCF 2 surd form: {conjugate_pscf2.quadratic_surd()}")
 
-    # inverse_pscf2 = pscf2.inverse()
-    # print(f"Inverse of PSCF 2: {inverse_pscf2}")
-    # print(f"Inverse of PSCF 2 as decimal: {inverse_pscf2.convergent(100)[0] / inverse_pscf2.convergent(100)[1]}")
-    # print(f"Inverse of PSCF 2 quadratic coefficients: {inverse_pscf2.quadratic_coefficients()}")
-    # print(f"Inverse of PSCF 2 surd form: {inverse_pscf2.quadratic_surd()}")
+    # # inverse_pscf2 = pscf2.inverse()
+    # # print(f"Inverse of PSCF 2: {inverse_pscf2}")
+    # # print(f"Inverse of PSCF 2 as decimal: {inverse_pscf2.convergent(100)[0] / inverse_pscf2.convergent(100)[1]}")
+    # # print(f"Inverse of PSCF 2 quadratic coefficients: {inverse_pscf2.quadratic_coefficients()}")
+    # # print(f"Inverse of PSCF 2 surd form: {inverse_pscf2.quadratic_surd()}")
 
-    sqer2 = catena.PeriodicSimpleContinuedFraction(period=(2,), pre_period=(), integer_part=1)
-    print(f"Square root of 2 as PSCF: {sqer2}")
-    print(f"Square root of 2 as decimal: {sqer2.convergent(100)[0] / sqer2.convergent(100)[1]}")
-    print(f"Square root of 2 quadratic coefficients: {sqer2.quadratic_coefficients()}")
-    print(f"Square root of 2 surd form: {sqer2.quadratic_surd()}") 
+    # sqer2 = catena.PeriodicSimpleContinuedFraction(period=(2,), pre_period=(), integer_part=1)
+    # print(f"Square root of 2 as PSCF: {sqer2}")
+    # print(f"Square root of 2 as decimal: {sqer2.convergent(100)[0] / sqer2.convergent(100)[1]}")
+    # print(f"Square root of 2 quadratic coefficients: {sqer2.quadratic_coefficients()}")
+    # print(f"Square root of 2 surd form: {sqer2.quadratic_surd()}") 
 
-    inverse_sqrt2 = sqer2.inverse()
-    print(f"Inverse of square root of 2 as PSCF: {inverse_sqrt2}")
-    print(f"Inverse of square root of 2 as decimal: {inverse_sqrt2.convergent(100)[0] / inverse_sqrt2.convergent(100)[1]}")
-    print(f"Inverse of square root of 2 quadratic coefficients: {inverse_sqrt2.quadratic_coefficients()}")
-    print(f"Inverse of square root of 2 surd form: {inverse_sqrt2.quadratic_surd()}")
+    # inverse_sqrt2 = sqer2.inverse()
+    # print(f"Inverse of square root of 2 as PSCF: {inverse_sqrt2}")
+    # print(f"Inverse of square root of 2 as decimal: {inverse_sqrt2.convergent(100)[0] / inverse_sqrt2.convergent(100)[1]}")
+    # print(f"Inverse of square root of 2 quadratic coefficients: {inverse_sqrt2.quadratic_coefficients()}")
+    # print(f"Inverse of square root of 2 surd form: {inverse_sqrt2.quadratic_surd()}")
 
-    inverse_conjugate_sqrt2 = inverse_sqrt2.conjugate()
-    print(f"Conjugate of the inverse of square root of 2 as PSCF: {inverse_conjugate_sqrt2}")
-    print(f"Conjugate of the inverse of square root of 2 as decimal: {inverse_conjugate_sqrt2.convergent(100)[0] / inverse_conjugate_sqrt2.convergent(100)[1]}")
-    print(f"Conjugate of the inverse of square root of 2 quadratic coefficients: {inverse_conjugate_sqrt2.quadratic_coefficients()}")
-    print(f"Conjugate of the inverse of square root of 2 surd form: {inverse_conjugate_sqrt2.quadratic_surd()}")
+    # inverse_conjugate_sqrt2 = inverse_sqrt2.conjugate()
+    # print(f"Conjugate of the inverse of square root of 2 as PSCF: {inverse_conjugate_sqrt2}")
+    # print(f"Conjugate of the inverse of square root of 2 as decimal: {inverse_conjugate_sqrt2.convergent(100)[0] / inverse_conjugate_sqrt2.convergent(100)[1]}")
+    # print(f"Conjugate of the inverse of square root of 2 quadratic coefficients: {inverse_conjugate_sqrt2.quadratic_coefficients()}")
+    # print(f"Conjugate of the inverse of square root of 2 surd form: {inverse_conjugate_sqrt2.quadratic_surd()}")
+
+    # print(x:=catena.FiniteSimpleContinuedFraction.from_rational((355, 113)))
+    # print(x.generator)
+    # M = 0 
+    # for _ in range(10000):
+    #     rscf = random_fscf()
+    #     plateau_order = find_plateau_order(rscf)
+    #     if plateau_order > M:
+    #         M = plateau_order
+    #         print(f"Random FSCF: {rscf}")
+    #         print(f"Plateau order: {find_plateau_order(rscf)}")
+
+    # print(find_plateau_order(catena.FiniteSimpleContinuedFraction.from_float(0.000000000009732050807568877)))
+
+    # phi = catena.PeriodicSimpleContinuedFraction(period=(1,), pre_period=(), integer_part=1)
+
+    # # for i in range(10):
+    # #     print(f"Tail convergent {i}: {phi.tail_convergent(i)}")
+    # #     print(f"Convergent {i}: {phi.convergent(i)}")
+
+    # _str = catena.strings.safe_int_str
+    # print(f"Tail convergent 100,000: {tuple(map(_str, phi.tail_convergent(100_000)))}")
+    # print(f"Tail convergent 100,000: {tuple(map(_str, phi.convergent(100_000)))}")
+    phi = catena.PeriodicSimpleContinuedFraction(period=(1,), pre_period=(), integer_part=1)
+    
+    for k in range(0, 100):
+        c_k = phi.convergent(k)
+        c_next = phi.convergent(k+1)
+        print(f"Determinant of convergents {k} and {k+1}: {c_k[0]*c_next[1] - c_k[1]*c_next[0]}")
+
+    

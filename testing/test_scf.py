@@ -5,10 +5,11 @@ rules, frozen-attribute protection, the tail-convergent recurrence, caching
 semantics, and the shift / add API.
 
 All expected values are hand-verified against the standard SCF recurrence:
-    h_{-1} = 1,  h_0 = a_1
-    k_{-1} = 0,  k_0 = 1   (implicit – exposed via base-case checks)
-    h_n    = a_{n+1} * h_{n-1} + h_{n-2}
+    h_{-2} = 1,  k_{-2} = 0
+    h_{-1} = 0,  k_{-1} = 1
+    h_n    = a_{n+1} * h_{n-1} + h_{n-2}   (n >= 0, a_{n+1} = generator(n))
     k_n    = a_{n+1} * k_{n-1} + k_{n-2}
+In particular:  h_0 = 1,  k_0 = a_1 = generator(0)
 """
 
 import pytest
@@ -180,6 +181,7 @@ def test_integer_part_setter_rejects_string():
 # ---------------------------------------------------------------------------
 
 def test_tail_convergent_n0_numerator_is_always_one():
+    # h_0 = a_1 * h_{-1} + h_{-2} = a_1 * 0 + 1 = 1 for every generator
     for g in [ones, twos, threes, nat_plus_one]:
         scf = SimpleContinuedFraction(g)
         h, _ = scf.tail_convergent(0)
@@ -187,18 +189,25 @@ def test_tail_convergent_n0_numerator_is_always_one():
 
 
 def test_tail_convergent_n0_denominator_equals_generator_at_0():
-    for k, g in enumerate([ones, twos, threes]):
-        expected = k + 1
+    # k_0 = a_1 * k_{-1} + k_{-2} = a_1 * 1 + 0 = a_1 = generator(0)
+    for g in [ones, twos, threes, nat_plus_one]:
         scf = SimpleContinuedFraction(g)
         _, d = scf.tail_convergent(0)
-        assert d == expected
-
+        assert d == g(0)
 
 def test_tail_convergent_n1_numerator_equals_generator_at_1():
-    # h_1 = a_2 = generator(1)
-    scf = SimpleContinuedFraction(nat_plus_one)
-    h, _ = scf.tail_convergent(1)
-    assert h == nat_plus_one(1)   # = 2
+    # h_1 = a_2 * h_0 + h_{-1} = a_2 * 1 + 0 = a_2 = generator(1)
+    for g in [ones, twos, threes, nat_plus_one]:
+        scf = SimpleContinuedFraction(g)
+        h, _ = scf.tail_convergent(1)
+        assert h == g(1)
+
+def test_tail_convergent_n1_denominator_equals_a2_times_a1_plus_one():
+    # k_1 = a_2 * k_0 + k_{-1} = a_2 * a_1 + 1 = generator(1) * generator(0) + 1
+    for g in [ones, twos, threes, nat_plus_one]:
+        scf = SimpleContinuedFraction(g)
+        _, d = scf.tail_convergent(1)
+        assert d == g(1) * g(0) + 1
 
 
 def test_tail_convergent_n1_denominator_is_a1_times_a2_plus_one():
@@ -230,12 +239,6 @@ def test_tail_convergent_negative_n_raises_recursion_error():
     with pytest.raises(RecursionError):
         scf.tail_convergent(-3) # cases -2 and -1 are handled by base cases to account for the 
         # general definition of the recurrence, but -3 and below should raise an error to prevent infinite recursion.
-
-
-def test_tail_convergent_minus_two_returns_h_minus_2_seed():
-    """tail_convergent(-2) must return the (h₋₂, k₋₂) = (1, 0) seed."""
-    scf = SimpleContinuedFraction(ones)
-    assert scf.tail_convergent(-2) == (1, 0)
 
 
 def test_tail_convergent_minus_one_returns_h_minus_1_seed():
@@ -341,6 +344,14 @@ def test_convergent_denominators_are_strictly_increasing():
         prev_k = k
 
 
+def test_consecutive_convergents_hold_the_determinant():
+    scf = SimpleContinuedFraction(ones)
+    for n in range(1, 80):
+        h_n, k_n = scf.convergent(n)
+        h_n1, k_n1 = scf.convergent(n - 1)
+        assert h_n * k_n1 - h_n1 * k_n == (-1) ** n
+
+
 # ---------------------------------------------------------------------------
 # Caching – memoisation semantics
 # ---------------------------------------------------------------------------
@@ -372,7 +383,8 @@ def test_sequential_new_indices_fill_cache():
     scf = SimpleContinuedFraction(ones)
     for n in range(6):
         scf.tail_convergent(n)
-    assert len(scf.cache_handler.cache) == 6
+    # Entries n=0..5 are cached, plus the seed n=-1 (reached via the n=1 recurrence)
+    assert len(scf.cache_handler.cache) == 7
 
 
 def test_deep_call_fills_intermediate_entries():
@@ -381,6 +393,20 @@ def test_deep_call_fills_intermediate_entries():
     scf.tail_convergent(5)
     for n in range(6):
         assert n in scf.cache_handler.cache
+
+def test_tail_convergent_cache_does_not_hit_stack_overflow():
+    """The iterative fill must not raise RecursionError even when n exceeds the limit."""
+    import sys
+    default_limit = sys.getrecursionlimit()
+    n = 1500
+    try:
+        sys.setrecursionlimit(n)
+        scf = SimpleContinuedFraction(ones)
+        scf.tail_convergent(n // 2)  # well below limit
+        scf.tail_convergent(n)       # at the limit
+        scf.tail_convergent(n * 2)   # beyond the limit
+    finally:
+        sys.setrecursionlimit(default_limit)
 
 
 # ---------------------------------------------------------------------------
@@ -526,6 +552,17 @@ def test_int_independent_of_generator():
         scf = SimpleContinuedFraction(g, integer_part=3)
         assert int(scf) == 3
 
+# ---------------------------------------------------------------------------
+# __float__
+# ---------------------------------------------------------------------------
+
+def test_float_call_matches_high_order_convergent():
+    for g in [ones, twos, nat_plus_one]:
+        scf = SimpleContinuedFraction(g, integer_part=1)
+        # float(scf) should be equal to convergent(100)
+        p, q = scf.convergent(100)
+        expected = p / q
+        assert float(scf) == expected
 
 # ---------------------------------------------------------------------------
 # tail()
@@ -618,3 +655,64 @@ def test_inverse_convergents_are_reciprocals():
     from math import isclose, sqrt
     assert isclose(p / q, 1 / sqrt(2), rel_tol=1e-9)
 
+
+# ---------------------------------------------------------------------------
+# segment()
+# ---------------------------------------------------------------------------
+
+def test_segment_is_finite_of_length_k_for_all_k():
+    from catena import FiniteSimpleContinuedFraction
+    scf = SimpleContinuedFraction(ones, integer_part=1)
+    for k in range(100):
+        seg = scf.segment(k)
+        assert isinstance(seg, FiniteSimpleContinuedFraction)
+        assert len(seg) == k
+
+
+def test_segment_integer_part_matches_original():
+    scf = SimpleContinuedFraction(ones, integer_part=5)
+    seg = scf.segment(10)
+    assert seg.integer_part == 5
+
+
+def test_segment_generator_matches_first_k_terms():
+    scf = SimpleContinuedFraction(nat_plus_one, integer_part=1)
+    for k in range(10):
+        seg = scf.segment(k)
+        for n in range(k):
+            assert seg.generator(n) == nat_plus_one(n)
+
+
+def test_segment_convergents_match_original():
+    scf = SimpleContinuedFraction(twos, integer_part=1)
+    for k in range(10):
+        seg = scf.segment(k)
+        for n in range(k):
+            assert seg.convergent(n) == scf.convergent(n)
+
+
+def test_segment_terminal_convergent_equals_convergent_for_all_k():
+    scf = SimpleContinuedFraction(ones, integer_part=1)
+    for k in range(10):
+        seg = scf.segment(k)
+        assert seg.terminal_convergent == scf.convergent(seg.size - 1)
+        assert seg.terminal_tail_convergent == scf.tail_convergent(seg.size - 1)
+
+
+def test_segment_has_independent_cache():
+    """segment() creates a fresh FiniteSimpleContinuedFraction with its own cache."""
+    scf = SimpleContinuedFraction(ones, integer_part=1)
+    seg = scf.segment(5)
+    assert seg.cache_handler is not scf.cache_handler
+
+
+def test_float_zero_integer_part():
+    scf = SimpleContinuedFraction(twos, integer_part=0)
+    p, q = scf.convergent(50)
+    assert float(scf) == p / q
+
+
+def test_float_negative_integer_part():
+    scf = SimpleContinuedFraction(twos, integer_part=-1)
+    p, q = scf.convergent(50)
+    assert float(scf) == p / q

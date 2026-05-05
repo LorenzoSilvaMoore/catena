@@ -819,3 +819,38 @@ def test_inverse_zero_raises():
     with pytest.raises(ZeroDivisionError):
         zero_scf.inverse()
 
+# ===========================================================================
+# segment(n)
+# ===========================================================================
+
+def test_segment_returns_finite_scf():
+    scf = FiniteSimpleContinuedFraction([1, 2, 3, 4, 5, 6, 7, 8, 9], integer_part=0)
+    seg = scf.segment(5)
+    assert isinstance(seg, FiniteSimpleContinuedFraction)
+
+def test_segment_at_size_returns_different_object_with_shared_cache():
+    scf = FiniteSimpleContinuedFraction([1, 2, 3], integer_part=0)
+    seg = scf.segment(3)  # segment at size should return a different object
+    assert seg is not scf
+    assert seg.cache_handler is scf.cache_handler
+
+def test_segment_over_size_raises_index_error():
+    scf = FiniteSimpleContinuedFraction([1, 2, 3], integer_part=0)
+    with pytest.raises(IndexError):
+        scf.segment(4)  # size is 3, so index 4 is out of bounds
+
+def test_segment_below_size_has_independent_cache():
+    """For n < size, segment() creates a new FSCF with its own independent cache."""
+    scf = FiniteSimpleContinuedFraction([1, 2, 3, 4, 5], integer_part=2)
+    seg = scf.segment(3)
+    assert seg.cache_handler is not scf.cache_handler
+
+def test_segment_below_size_correct_partial_quotients():
+    scf = FiniteSimpleContinuedFraction([1, 2, 3, 4, 5], integer_part=2)
+    seg = scf.segment(3)
+    assert seg.partial_quotients == (1, 2, 3)
+
+def test_segment_below_size_preserves_integer_part():
+    scf = FiniteSimpleContinuedFraction([1, 2, 3, 4, 5], integer_part=7)
+    seg = scf.segment(2)
+    assert seg.integer_part == 7
