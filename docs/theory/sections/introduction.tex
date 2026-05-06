@@ -1,0 +1,87 @@
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Introduction and Scope}
+% ─────────────────────────────────────────────────────────────────────────────
+
+This document records the mathematical foundations and algorithmic design decisions
+behind \catena, a Python library for simple continued fractions.
+It is intended as a living document: new sections will be added as the library
+grows to cover further aspects of the theory.
+
+The current implementation (\texttt{v0.2.0}) covers finite SCFs over the rationals,
+infinite generative SCFs, and periodic SCFs for quadratic irrationals.
+
+\subsection{What continued fractions offer}
+
+A real number can be represented in several ways: as a floating-point approximation,
+as an exact rational via \texttt{fractions.Fraction}, as a fixed-precision decimal,
+or as a continued fraction.  Each representation makes different trade-offs.
+
+Floats are fast and ubiquitous, but they introduce rounding error at every operation.
+A float is not a rational number; it is the nearest representable binary fraction,
+and the gap between the two is invisible unless you care to look for it.
+
+\texttt{fractions.Fraction} is exact and supports arbitrary precision, but it
+accumulates large numerators and denominators quickly: adding two fractions of
+$n$-digit denominators can produce a $2n$-digit denominator, and every operation
+pays a GCD reduction to keep the result in lowest terms.
+
+Continued fractions offer a different kind of exactness.  The partial quotients
+$[a_0;\, a_1, a_2, \ldots]$ are small integers — typically single digits for
+naturally occurring constants — so the representation is compact.  The $n$-th
+convergent $p_n/q_n$ is automatically in lowest terms by the determinant identity
+$p_n q_{n-1} - p_{n-1} q_n = \pm 1$, with no GCD step required.  Convergents
+also have an optimality property: $p_n/q_n$ is the best rational approximation
+to the true value among all fractions with denominator $\leq q_n$.
+
+For irrational numbers, the continued fraction is the natural representation.
+$\sqrt{2} = [1;\overline{2}]$, $\varphi = [1;\overline{1}]$, and more generally
+every quadratic irrational has an eventually periodic expansion.  Floats and
+decimals can only approximate; the SCF records the structure exactly.
+
+These properties make SCFs useful for problems where rational approximation
+quality matters — gear-ratio design, modular arithmetic, Pell's equation, and
+the analysis of approximation algorithms, among others.  \catena is built around
+this perspective: the library works with the SCF itself as the primary object,
+deriving convergents and numeric approximations from it on demand.
+
+\subsection{Scope}
+
+\catena provides three main abstractions:
+
+\begin{itemize}[nosep]
+  \item \texttt{SimpleContinuedFraction} — an infinite SCF $[a_0;\,a_1,a_2,\ldots]$
+        driven by an arbitrary callable generator.  Convergents are memoised as they
+        are requested; the cache is shared when the same tail is viewed with a different
+        integer part (e.g.\ after an integer shift).
+  \item \texttt{FiniteSimpleContinuedFraction} — a finite SCF
+        $[a_0;\,a_1,\ldots,a_k]$ over $\Q$, constructible from a rational, float,
+        or decimal string.  Supports exact rational arithmetic and multiplicative inverse.
+  \item \texttt{PeriodicSimpleContinuedFraction} — an eventually-periodic SCF
+        $[a_0;\,a_1,\ldots,a_m,\,\overline{b_1,\ldots,b_r}]$ representing a quadratic
+        irrational $(P + \sqrt{D})/Q$.  Provides algebraic operations: conjugate,
+        inverse, negation, and exact decimal evaluation.
+\end{itemize}
+
+The mathematical content of this document is therefore structured around these
+three cases.  It is not intended to be an exhaustive treatment of continued fraction
+theory; for that, see \cite{khinchin1964} and \cite{rockett1992}.  The goal is to
+give enough background to justify the algorithms and design choices in the library.
+
+\subsection{Conventions}
+      
+Throughout this document:
+\begin{itemize}[nosep]
+      \item $\N$ denotes the natural numbers (including zero).
+      \item For any $n \in \N$, we implicitly assume the set theorey construction $n = \{0, 1, \ldots, n-1\}$.
+      \item $\Z$, $\Q$, $\R$ denote the integers, rationals, and reals respectively.
+      \item Likewise, $\Zp$, $\Qp$, $\Rp$ denote the positive (non-zero) integers, rationals, and reals respectively.
+      \item $[a_0;\, a_1, a_2, \ldots, a_n]$ denotes a finite SCF with $a_0 \in \Z$ and
+            $a_k \in \Zp$ for $k \geq 1$.
+      \item $c_k = (p_k, q_k)$ denotes the $k$-th convergent numerator--denominator pair, with
+            $q_k \in \Zp$ by convention.
+      \item The function $\{\cdot\}: \R \to \R$ denotes the fractional part, so $\{x\} = x - \lfloor x \rfloor$.
+      \item For a function $f: A \to B$, we write $f(a) = b$ to mean $f$ maps $a$ to $b$.
+      \item For a function $f: A \to B$ and a subset $S \subseteq A$, we write $f(S) = \{f(s) : s \in S\}$ to mean the image of $S$ under $f$.
+      \item For a function $f: A \to B$ and a subset $T \subseteq B$, we write $f^{-1}(T) = \{a \in A : f(a) \in T\}$ to mean the preimage of $T$ under $f$.
+      \item For a function $f: A \to B$ and a subset $S \subseteq A$, we write $f|_S: S \to B$ to mean the restriction of $f$ to $S$, defined by $f|_S(s) = f(s)$ for all $s \in S$.
+\end{itemize}

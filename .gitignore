@@ -26,7 +26,6 @@ testing/store/*.hash
 # docs
 docs/BIBLIOGRAPHY.md
 docs/BIBLIOGRAPHY_PYTHON.md
-docs/theory
 
 
 # misc

@@ -1,0 +1,73 @@
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Finite Simple Continued Fractions}
+% ─────────────────────────────────────────────────────────────────────────────
+
+We now turn to the case of finite simple continued fractions, which correspond to rational numbers.
+As mentioned in the definition of the \texttt{SimpleContinuedFraction} class, the body generator 
+$g$ is allowed to have a finite domain, in which case the resulting SCF is finite.
+
+Every rational $\nicefrac{p}{q}$ number admits exactly two finite SCF representations, one of which has a final partial quotient of 1.
+\[
+    \frac{p}{q} = [a_0; a_1, \ldots, a_n] = [a_0; a_1, \ldots, a_{n-1}, a_n - 1, 1] \quad \text{with } a_n \geq 2.
+\]
+
+When it is said that a rational number has a \textit{unique} SCF representation, it is understood
+that the representation is taken in canonical form, i.e. with $a_n \geq 2$. While this condition
+is not enforced at runtime, all constructors that produce finite SCFs (e.g. 
+\texttt{FiniteContinuedFraction.from\_rational}) return the canonical form.
+
+\subsection{The Euclidean Algorithm as SCF Expansion}
+
+The SCF coefficients of $p/q$ are precisely the successive quotients produced by the
+Euclidean algorithm.
+Concretely, \texttt{Convert.from\_rational\_to\_scf} implements:
+\begin{align*}
+  p_0 &= p, \quad p_1 = q, \\
+  a_k &= \left\lfloor \frac{p_k}{p_{k+1}} \right\rfloor, \\
+  p_{k+2} &= p_k \bmod p_{k+1}, \qquad k \geq 0,
+\end{align*}
+until a zero remainder is reached.
+
+\begin{remark}
+This correspondence between the Euclidean algorithm and SCF expansion provides
+the bijection between finite (canonical) SCFs and rational numbers.
+
+The library uses \texttt{divmod} (Python's built-in, backed by hardware division) for each step,
+relying on Python's arbitrary-precision integers so that very large rationals are handled correctly
+without overflow.
+\end{remark}
+
+\begin{catenadef}[Conversion from Rational-like Types to Finite SCF]
+\begin{lstlisting}[style=python]
+from catena import FiniteSimpleContinuedFraction
+
+# Convert a rational (Fraction | tuple[int, int] | int) number to its finite SCF representation.
+rational_number = (17, 15) # Represents 17/15
+finite_scf = FiniteSimpleContinuedFraction.from_rational(rational_number)
+print(finite_scf) # FiniteSimpleContinuedFraction(partial_quotients=(7, 2), integer_part=1)
+
+# Convert a float number to its finite SCF representation.
+# Note: this conversion may not be exact due to the nature of floating-point representation.
+float_number = 3.14
+finite_scf_from_float = FiniteSimpleContinuedFraction.from_float(float_number)
+print(finite_scf_from_float) # FiniteSimpleContinuedFraction(partial_quotients=(7, 7, 3216856876693, 14), integer_part=3)
+
+finite_scf_from_float_limited = FiniteSimpleContinuedFraction.from_float(3.14, max_denominator=10000) # Limit the denominator to 10,000 to elude floating-point precision artifacts.
+print(finite_scf_from_float_limited) # FiniteSimpleContinuedFraction(partial_quotients=(7, 7), integer_part=3)
+
+# Convert a decimal string to its finite SCF representation.
+decimal_string = "3.14"
+finite_scf_from_decimal = FiniteSimpleContinuedFraction.from_decimal(decimal_string)
+print(finite_scf_from_decimal) # FiniteSimpleContinuedFraction(partial_quotients=(7, 7), integer_part=3)
+\end{lstlisting}
+\end{catenadef}
+
+\begin{remark}
+  \texttt{FiniteSimpleContinuedFraction.from\_decimal} takes a decimal string as input rather than a 
+  \texttt{decimal.Decimal} object. This is because the latter depends on a global precision context 
+  (\texttt{getcontext().prec}), and operations such as \texttt{Decimal(2).sqrt()} produce approximations 
+  whose accuracy depends on that context. As a result, converting directly from \texttt{Decimal} would 
+  require an additional precision parameter and would not be guaranteed to produce consistent results 
+  across different environments. Using a decimal string avoids this ambiguity by making the input 
+  representation explicit in the API call.
+\end{remark}

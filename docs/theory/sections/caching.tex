@@ -1,0 +1,45 @@
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Caching Strategy}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\subsection{Motivation}
+
+The recurrence \eqref{eq:recurrence} has optimal substructure: computing $x_k$ requires
+$x_{k-1}$ and $x_{k-2}$.
+Without memoisation, naive recursion recomputes all earlier convergents each time a later
+one is requested, giving $O(2^n)$ work.
+With memoisation, each convergent is computed once: $O(n)$ total.
+
+\subsection{Cache Design}
+
+\begin{description}[style=nextline]
+  \item[\texttt{Cache}.]
+    An append-only \texttt{UserDict}: once a key is set, any attempt to overwrite it raises
+    \texttt{KeyError}.
+    This makes the cache semantically immutable after population, which is correct because
+    convergents of a fixed SCF are a deterministic function of the index.
+
+  \item[\texttt{CacheHandler}.]
+    Holds a \texttt{Cache} pointer and a call counter.
+    Both attributes are protected by a custom \texttt{\_\_setattr\_\_} so they cannot be
+    accidentally reassigned.
+    \texttt{reset\_cache} and \texttt{prune\_cache} are provided for memory management.
+
+  \item[\texttt{SetLightCache}.]
+    A closure factory wrapping a single-argument function.
+    Used for \texttt{convergent} because the index $n$ is the only argument.
+    Avoids the overhead of a frozenset hash on kwargs.
+
+  \item[\texttt{SetCache}.]
+    General multi-argument version using \texttt{(args, frozenset(kwargs.items()))} as the
+    cache key.
+\end{description}
+
+\subsection{Open Questions}
+
+\begin{enumerate}[nosep]
+  \item Should \texttt{CacheHandler.prune\_cache} use an LRU policy instead of keeping
+        only the $n$ largest indices?
+  \item For very long bodies ($n \sim 10^6$), should the cache be replaced by a flat array
+        indexed by $n$?
+\end{enumerate}
