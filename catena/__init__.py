@@ -21,6 +21,7 @@ except PackageNotFoundError:
 
 from . import mathlib
 from . import strings
+from . import cache
 
 from .catena import (
     SimpleContinuedFraction,

@@ -589,9 +589,11 @@ class SimpleContinuedFraction:
         if self.integer_part == 0:
             new_integer_part = self.generator(0)
             new_generator = lambda n: self.generator(n + 1)
-        else:
+        elif self.integer_part > 0:
             new_integer_part = 0
             new_generator = lambda n: self.generator(n - 1) if n > 0 else self.integer_part
+        else:
+            raise ValueError("Negative integer part is not supported for inversion")
 
         self._inverse = SimpleContinuedFraction(generator=new_generator, integer_part=new_integer_part)
         self._inverse._inverse = self   # Cache the inverse of the inverse as the original SCF
@@ -856,14 +858,19 @@ class PeriodicSimpleContinuedFraction(SimpleContinuedFraction):
     Extends :class:`SimpleContinuedFraction` with two fixed sequences of
     partial quotients stored in
     :class:`~catena.generators.FiniteGenerator` instances: the non-repeating
-    prefix ``[a₁, …, aₘ]`` and the repeating period ``(b₁, …, bₙ)``.  Provides:
+    prefix ``[a₁, …, aₘ]`` (the *pre-period*) and the repeating period
+    ``(b₁, …, bₙ)``.  All :class:`SimpleContinuedFraction` methods
+    (``convergent``, ``tail_convergent``, ``tail``, ``segment``, ``shift``,
+    ``__add__``) are inherited unchanged.  Additional members:
 
-    * Sequence-like properties: :attr:`non_repeating_part`, :attr:`period`,
-      :attr:`period_length`, ``__len__``, ``__float__``, ``__int__``, ``__bool__``.
-    * Terminal convergent shorthands: :attr:`period_convergent`,
-      :attr:`period_tail_convergent`.
-    * Factory class methods: :meth:`from_rational`, :meth:`from_float`,
-      :meth:`from_decimal`.
+    * Structure: :attr:`non_repeating_part`, :attr:`period`.
+    * Numeric: ``__float__`` (overridden; uses algebraic formula directly),
+      ``__neg__``, :meth:`as_decimal`.
+    * Factory: :meth:`from_quadratic_surd`.
+    * Algebraic (justification deferred): :meth:`quadratic_coefficients`,
+      :meth:`quadratic_surd`, :meth:`is_principal_surd`,
+      :meth:`is_conjugate_root`, :meth:`inverse` (overridden),
+      :meth:`conjugate`.
     """
 
     def __init__(self, period: Sequence[int], pre_period: Optional[Sequence[int]] = [], integer_part: int = 0, dtypes: Optional[Tuple[str, str]] = None):
