@@ -1,0 +1,34 @@
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Notation Index}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\begin{tabular}{lll}
+\toprule
+Symbol & \catena{} attribute & Meaning \\
+\midrule
+$[a_0;\, a_1, \ldots, a_n]$  & ---                          & Finite simple continued fraction \\
+$a_0$                         & \texttt{integer\_part}       & Integer part of the SCF \\
+$g: I \to \Zp$               & \texttt{generator}           & Callable partial-quotient generator \\
+$(a_1, \ldots, a_k)$          & \texttt{partial\_quotients}  & Body sequence (finite case only) \\
+$k = |I|$                     & \texttt{size}                & Number of body elements (finite case) \\
+$x_n = (a_0, g|_n)$          & \texttt{segment($n$)}        & $n$-th segment (truncation to first $n$ body quotients) \\
+$t(x) = (0, g)$               & \texttt{tail()}              & Tail: SCF with integer part set to zero \\
+$(h_n, k_n)$                  & \texttt{tail\_convergent($n$)} & $n$-th tail convergent numerator/denominator \\
+$(p_n, q_n)$                  & \texttt{convergent($n$)}     & $n$-th full convergent numerator/denominator \\
+$r_n(x) = (g(n), h)$          & ---                          & $n$-th remainder (not yet implemented in \catena) \\
+$\{\cdot\}$                   & ---                          & Fractional part $\{x\} = x - \lfloor x \rfloor$ \\
+$f|_S$                        & ---                          & Restriction of $f$ to subset $S$ of its domain \\
+$T$                           & ---                          & Gauss map $x \mapsto \{1/x\}$ \\
+\bottomrule
+\end{tabular}
+
+\begin{remark}
+  The notation table entry \texttt{body} from earlier drafts has been replaced.
+  In the codebase, \texttt{body} (or \texttt{partial\_quotients}) refers to the
+  finite \emph{sequence} $(a_1, \ldots, a_k)$, while \texttt{generator} is the
+  callable $g: I \to \Zp$.  These are distinct: the generator is an arbitrary
+  function, whereas the partial-quotients sequence is its finite materialisation.
+  The paper uses $g$ throughout; \texttt{partial\_quotients} is the
+  \texttt{FiniteSimpleContinuedFraction}-specific attribute that stores the
+  precomputed values.
+\end{remark}

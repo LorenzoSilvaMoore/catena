@@ -474,20 +474,49 @@ if __name__ == "__main__":
 
     # print(find_plateau_order(catena.FiniteSimpleContinuedFraction.from_float(0.000000000009732050807568877)))
 
-    # phi = catena.PeriodicSimpleContinuedFraction(period=(1,), pre_period=(), integer_part=1)
+    # phi = catena.PeriodicSimpleContinuedFraction(period=(1,), pre_period=(), integer_part=0)
 
-    # # for i in range(10):
-    # #     print(f"Tail convergent {i}: {phi.tail_convergent(i)}")
-    # #     print(f"Convergent {i}: {phi.convergent(i)}")
+    # for i in range(10):
+    #     print(f"Tail convergent {i}: {phi.tail_convergent(i)}")
+    #     print(f"Convergent {i}: {phi.convergent(i)}")
 
     # _str = catena.strings.safe_int_str
     # print(f"Tail convergent 100,000: {tuple(map(_str, phi.tail_convergent(100_000)))}")
     # print(f"Tail convergent 100,000: {tuple(map(_str, phi.convergent(100_000)))}")
-    phi = catena.PeriodicSimpleContinuedFraction(period=(1,), pre_period=(), integer_part=1)
+    phi = catena.PeriodicSimpleContinuedFraction(period=(1,), pre_period=(), integer_part=0)
     
     for k in range(0, 100):
         c_k = phi.convergent(k)
         c_next = phi.convergent(k+1)
-        print(f"Determinant of convergents {k} and {k+1}: {c_k[0]*c_next[1] - c_k[1]*c_next[0]}")
+        c_next2 = phi.convergent(k+2)
+        # print(f"Determinant of convergents {k} and {k+1}: {c_k[0]*c_next[1] - c_k[1]*c_next[0]}")
+        # print(f"Difference between convergents {k} and {k+2}: {(c_k[0]*c_next2[1] - c_k[1]*c_next2[0])}")
+        print(f"Value of q_{k} * q_{k+1}: {c_k[1]} * {c_next[1]} = {c_k[1] * c_next[1]}. Bigger than e17: {c_k[1] * c_next[1] > 10**17}")
+        print(f"Value of convergent {k}: {c_k[0]/c_k[1]}")
 
-    
+    # for k in range(1, 100, 2):
+    #     c_k = phi.convergent(k)
+    #     c_next = phi.convergent(k+1)
+    #     print(f"Value of convergent {k}: {c_k[0]/c_k[1]}")
+
+    # u = [1, 2, 3, 4, 5]
+    # v = [5, 4, 3, 2, 2]
+    # v0 = v[0]
+    # v_ = v[1:]
+
+    # scf_u = catena.FiniteSimpleContinuedFraction(partial_quotients=u, integer_part=0)
+    # scf_v = catena.FiniteSimpleContinuedFraction(partial_quotients=v, integer_part=0)
+    # scf_v_ = catena.FiniteSimpleContinuedFraction(partial_quotients=v_, integer_part=0)
+    # scf_uv = catena.FiniteSimpleContinuedFraction(partial_quotients=u+v, integer_part=0)
+
+    # _, q_u = scf_u.terminal_convergent
+    # p_v_, q_v_ = scf_v_.terminal_convergent
+
+    # q_u = scf_u.terminal_convergent[1]
+    # q_u1 = scf_u.convergent(len(u)-2)[1]
+    # q_v = v0*q_v_ + p_v_
+
+    # print(f"q_v vs real q_v: {q_v} vs {scf_v.terminal_convergent[1]}")
+
+    # q_uv = q_u*q_v + q_u1*q_v_
+    # print(f"q_uv vs real q_uv: {q_uv} vs {scf_uv.terminal_convergent[1]}")

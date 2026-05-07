@@ -1,0 +1,267 @@
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Finite Simple Continued Fractions}
+% ─────────────────────────────────────────────────────────────────────────────
+\label{sec:finite_scf}
+We now turn to the case of finite simple continued fractions, which correspond to rational numbers.
+As mentioned in the definition of the \texttt{SimpleContinuedFraction} class, the body generator
+$g$ is allowed to have a finite domain, in which case the resulting SCF is finite.
+
+\begin{proposition}[Dual Representations of Rationals]
+  Let $p/q \in \mathbb{Q}$.  If $p/q \notin \mathbb{Z}$, it admits exactly two finite SCF
+  representations:
+  \[
+    \frac{p}{q} = [a_0;\, a_1, \ldots, a_n]
+               = [a_0;\, a_1, \ldots, a_{n-1},\, a_n - 1,\, 1],
+  \]
+  where the first form has $a_n \geq 2$.  If $p/q \in \mathbb{Z}$, the unique representation
+  is $[p/q]$ (empty body).
+
+  The \emph{canonical form} is the first representation (with $a_n \geq 2$).  Both
+  representations are valid SCFs; the alternate form is obtained from the canonical one
+  by replacing the last quotient $a_n$ with $a_n - 1$ followed by~$1$.
+\end{proposition}
+
+\begin{proof}[Proof sketch]
+  When the Euclidean algorithm reaches its final non-zero remainder $r_n$, the last
+  quotient is $a_n = r_{n-1} / r_n \geq 1$.  If $a_n \geq 2$ we have the canonical
+  form.  If $a_n = 1$ we rewrite $[\ldots, 1]$ as $[\ldots\,]$ by absorbing the
+  trailing $1$ into $a_{n-1}+1$, restoring $a_{n-1}+1 \geq 2$; this is the unique
+  canonical form.  Conversely, starting from the canonical form one can always perform
+  one extra Euclidean step: replace $a_n$ by $a_n - 1$ and append $1$, giving the
+  alternate form.  Since $a_n \geq 2$ the subtracted quotient $a_n - 1 \geq 1$ is a
+  valid partial quotient.  No third representation exists because any further step
+  would require a quotient of $0$.  See \cite{khinchin1964} for a full proof.
+\end{proof}
+
+\begin{remark}
+  The constructor \texttt{FiniteSimpleContinuedFraction(pq, integer\_part=a0)}
+  validates that every element of \texttt{pq} is a strictly positive integer, but does
+  \emph{not} check whether the last element equals $1$ (which would indicate a non-canonical
+  form).  The burden of canonical form is placed on the factory methods:
+  \texttt{from\_rational}, \texttt{from\_float}, and \texttt{from\_decimal} all delegate to
+  \texttt{from\_rational\_to\_scf} (which runs the Euclidean algorithm and naturally produces
+  canonical output), so their result is always canonical.  Direct construction via the
+  constructor allows non-canonical inputs for flexibility.
+\end{remark}
+
+\subsection{The Euclidean Algorithm as SCF Expansion}
+
+The SCF coefficients of $p/q$ are precisely the successive quotients produced by the
+Euclidean algorithm.
+Concretely, \texttt{catena.mathlib.convert.from\_rational\_to\_scf} implements:
+\begin{align*}
+  r_0 &= p,\quad r_1 = q, \\
+  a_k &= \left\lfloor \frac{r_k}{r_{k+1}} \right\rfloor, \\
+  r_{k+2} &= r_k \bmod r_{k+1}, \qquad k \geq 0,
+\end{align*}
+until $r_{k+1} = 0$.  The resulting sequence $(a_0, a_1, \ldots)$ is the SCF expansion of
+$p/q$.
+
+\begin{remark}
+This correspondence between the Euclidean algorithm and SCF expansion provides the bijection
+between finite (canonical) SCFs and rational numbers.
+
+The library uses \texttt{divmod} (Python's built-in, backed by hardware division) for each
+step, relying on Python's arbitrary-precision integers so that very large rationals are
+handled correctly without overflow.
+
+Note that $r_k$ denotes the Euclidean remainders here, \emph{not} the convergent numerators;
+the letter $p$ (and $h$ in the convergents section) is reserved for the latter throughout.
+\end{remark}
+
+\texttt{from\_rational\_to\_scf} returns the integer part and the body list as a pair
+$(a_0,\,[a_1, \ldots, a_n])$, matching the split representation used throughout the library:
+
+\begin{catenadef}[\texttt{from\_rational\_to\_scf}]
+\begin{lstlisting}[style=python]
+from catena.mathlib.convert import from_rational_to_scf
+
+# Returns (integer_part, body_list)
+from_rational_to_scf((355, 113))   # (3, [7, 16])
+from_rational_to_scf((1, 1))       # (1, [])     -- pure integer, empty body
+from_rational_to_scf((-3, 7))      # (-1, [1, 1, 3])
+\end{lstlisting}
+\end{catenadef}
+
+\begin{catenadef}[Conversion from Rational-like Types to Finite SCF]
+\begin{lstlisting}[style=python]
+from catena import FiniteSimpleContinuedFraction
+
+# Convert a rational (Fraction | tuple[int, int] | int) number to its finite SCF representation.
+rational_number = (17, 15) # Represents 17/15
+finite_scf = FiniteSimpleContinuedFraction.from_rational(rational_number)
+print(finite_scf) # FiniteSimpleContinuedFraction(partial_quotients=(7, 2), integer_part=1)
+
+# Convert a float number to its finite SCF representation.
+# Note: this conversion may not be exact due to the nature of floating-point representation.
+float_number = 3.14
+finite_scf_from_float = FiniteSimpleContinuedFraction.from_float(float_number)
+print(finite_scf_from_float) # FiniteSimpleContinuedFraction(partial_quotients=(7, 7, 3216856876693, 14), integer_part=3)
+
+finite_scf_from_float_limited = FiniteSimpleContinuedFraction.from_float(3.14, max_denominator=10000) # Limit the denominator to 10,000 to elude floating-point precision artifacts.
+print(finite_scf_from_float_limited) # FiniteSimpleContinuedFraction(partial_quotients=(7, 7), integer_part=3)
+
+# Convert a decimal string to its finite SCF representation.
+finite_scf_from_decimal = FiniteSimpleContinuedFraction.from_decimal("3.14")
+print(finite_scf_from_decimal) # FiniteSimpleContinuedFraction(partial_quotients=(7, 7), integer_part=3)
+
+# from_decimal also accepts integer strings.
+finite_scf_from_int_str = FiniteSimpleContinuedFraction.from_decimal("42")
+print(finite_scf_from_int_str) # FiniteSimpleContinuedFraction(partial_quotients=(), integer_part=42)
+\end{lstlisting}
+\end{catenadef}
+
+\begin{remark}
+  The coefficient \texttt{3216856876693} appearing in the SCF of \texttt{from\_float(3.14)} is not
+  a property of the rational number $314/100$, but of the IEEE~754 double-precision binary fraction
+  nearest to $3.14$.  That value is $7070651414971679 / 2^{51}$, and its SCF expansion reflects
+  the fine structure of this binary fraction.  Use \texttt{from\_decimal("3.14")} whenever the
+  exact decimal interpretation is intended.
+\end{remark}
+
+\begin{remark}
+  \texttt{FiniteSimpleContinuedFraction.from\_decimal} takes a decimal string as input rather than a
+  \texttt{decimal.Decimal} object.  This is because \texttt{Decimal} depends on a global precision
+  context (\texttt{getcontext().prec}), and operations such as \texttt{Decimal(2).sqrt()} produce
+  approximations whose accuracy depends on that context.  Converting directly from \texttt{Decimal}
+  would therefore require an additional precision parameter and would not produce consistent results
+  across environments.  Using a string avoids this ambiguity by making the input representation
+  explicit.
+
+  Internally, \texttt{from\_decimal} converts the string to an exact rational $(p, q)$ via
+  \texttt{from\_decimal\_to\_rational} — splitting on the decimal point, computing
+  $p = \text{integer\_part} \cdot 10^d + \text{fractional\_part}$ and $q = 10^d$ where $d$ is the
+  number of decimal digits, then reducing by $\gcd(p, q)$ — and then delegates to
+  \texttt{from\_rational}.  This path is exact for every finite decimal string.
+\end{remark}
+
+\begin{catenadef}[\texttt{FiniteSimpleContinuedFraction.to\_decimal}]
+\begin{lstlisting}[style=python]
+scf = FiniteSimpleContinuedFraction.from_decimal("3.14")
+scf.to_decimal()   # Decimal('3.14')
+
+# Decimal(scf) does not work: Python has no __decimal__ protocol.
+# Always call .to_decimal() explicitly.
+\end{lstlisting}
+\end{catenadef}
+
+
+\subsection{Properties and Operations of Finite SCFs}
+
+The attributes of finite SCFs are mostly inherited from the general case, but several of them
+have special significance or different behaviour in the finite case.  The table below lists the
+principal properties and methods provided by \texttt{FiniteSimpleContinuedFraction}:
+
+\begin{center}
+\begin{tabular}{ll}
+  \toprule
+  Property / method & Description \\
+  \midrule
+  \texttt{size} & Number of body elements $k$, equivalent to call \texttt{len(scf)} \\
+  \texttt{partial\_quotients} & Full body $(a_1,\ldots,a_k)$ as a tuple \\
+  \texttt{terminal\_convergent} & Exact rational value as $(p, q)$ \\
+  \texttt{terminal\_tail\_convergent} & Last tail convergent $(h_{k-1}, k_{k-1})$ \\
+  \texttt{to\_decimal()} & Exact \texttt{Decimal} value \\
+  \texttt{float(scf)} & Float via terminal convergent \\
+  \texttt{bool(scf)} & \texttt{False} only for the zero SCF $[0;]$ \\
+  \texttt{segment(n)} & Truncation to first $n$ body elements \\
+  \texttt{scf\_x + scf\_y} & Rational sum as a new finite SCF \\
+  \texttt{scf.inverse()} & Rational inverse as a new finite SCF \\
+  \bottomrule
+\end{tabular}
+\end{center}
+
+\begin{definition}[Terminal Convergent]
+  For a finite SCF $[a_0;\, a_1, \ldots, a_k]$ with $k = \texttt{size}$,
+  the \emph{terminal convergent} is the convergent at index $k-1$:
+  \[
+    \frac{p}{q} = [a_0;\, a_1, \ldots, a_k].
+  \]
+  This is the exact rational value of the SCF.  By the coprimality
+  corollary (Corollary~\ref{coro:coprimality}), $\gcd(p, q) = 1$.
+
+  For the degenerate case $k = 0$ (empty body), the terminal convergent is
+  $(a_0, 1)$.
+\end{definition}
+
+\begin{catenadef}[\texttt{FiniteSimpleContinuedFraction.terminal\_convergent}]
+\begin{lstlisting}[style=python]
+scf = FiniteSimpleContinuedFraction.from_rational((355, 113))
+scf.terminal_convergent   # (355, 113)
+
+scf_int = FiniteSimpleContinuedFraction([], integer_part=7)
+scf_int.terminal_convergent  # (7, 1)
+\end{lstlisting}
+\end{catenadef}
+
+\texttt{terminal\_convergent} is the central operation of
+\texttt{FiniteSimpleContinuedFraction}: it is called internally by
+\texttt{\_\_float\_\_}, \texttt{to\_decimal}, \texttt{\_\_add\_\_}, and
+\texttt{inverse}.
+
+\begin{remark}[\texttt{float()} for finite vs.\ infinite SCFs]
+  For infinite SCFs, \texttt{float()} uses the 50th convergent as a
+  heuristic approximation: the tail generator may not terminate, so there is
+  no canonical last term to evaluate.  For finite SCFs the terminal
+  convergent is the exact rational value, so \texttt{float()} computes
+  \texttt{terminal\_convergent[0] / terminal\_convergent[1]} directly — a
+  single Python float division.  No heuristic is needed or used.
+\end{remark}
+
+\begin{proposition}[Addition of Finite SCFs]\label{prop:fscf-add}
+  Let $x = [a_0;\, a_1, \ldots, a_k]$ and $y = [b_0;\, b_1, \ldots, b_m]$ be finite
+  SCFs with terminal convergents $p_x / q_x$ and $p_y / q_y$ respectively.
+  Then
+  \[
+    x + y = \left[\frac{p_x q_y + p_y q_x}{q_x q_y}\right]_{\!\mathrm{SCF}},
+  \]
+  where the right-hand side denotes the canonical SCF expansion of the
+  rational sum.
+\end{proposition}
+
+\begin{catenadef}[\texttt{FiniteSimpleContinuedFraction.\_\_add\_\_}]
+\begin{lstlisting}[style=python]
+x = FiniteSimpleContinuedFraction.from_rational((3, 4))   # 3/4
+y = FiniteSimpleContinuedFraction.from_rational((1, 6))   # 1/6
+z = x + y   # 3/4 + 1/6 = 11/12
+z.terminal_convergent   # (11, 12)
+
+# Adding an integer shifts the integer part (inherited behaviour).
+x + 2   # represents 3/4 + 2 = 11/4
+\end{lstlisting}
+\end{catenadef}
+
+Note that \texttt{scf + int} is handled by the parent class and shifts
+$a_0$ without touching the body; \texttt{scf + scf} is the proposition above
+and always returns a new \texttt{FiniteSimpleContinuedFraction} in canonical
+form.
+
+\begin{proposition}[Inverse of a Finite SCF]\label{prop:fscf-inv}
+  Let $x = [a_0;\, a_1, \ldots, a_k]$ with terminal convergent $p / q$,
+  $p \neq 0$.  Then
+  \[
+    \frac{1}{x} = \left[\frac{q}{p}\right]_{\!\mathrm{SCF}}.
+  \]
+\end{proposition}
+
+Note the design difference from the parent class:
+\texttt{SimpleContinuedFraction.inverse()} manipulates the generator directly
+(prepending $a_0$ or shifting the index), which is appropriate when the
+generator is infinite.  For a finite SCF it is simpler to invert the
+terminal fraction $p/q \mapsto q/p$ and run the Euclidean algorithm again.
+\catena chooses this second path: \texttt{FiniteSimpleContinuedFraction.inverse()}
+calls \texttt{from\_rational\_to\_scf} on the swapped pair $(q, p)$, so the
+result is always in canonical form.  The inverse is memoised (write-once
+cache) so that calling \texttt{inverse()} twice returns the original object.
+
+\begin{catenadef}[\texttt{FiniteSimpleContinuedFraction.inverse}]
+\begin{lstlisting}[style=python]
+x = FiniteSimpleContinuedFraction.from_rational((3, 4))   # 3/4
+x.inverse().terminal_convergent   # (4, 3)
+
+x.inverse().inverse() is x   # True  (memoised pair)
+
+zero = FiniteSimpleContinuedFraction([], integer_part=0)
+zero.inverse()   # raises ZeroDivisionError
+\end{lstlisting}
+\end{catenadef}

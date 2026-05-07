@@ -1,0 +1,57 @@
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Convergents and the Three-Term Recurrence}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\subsection{Definition}
+
+\begin{definition}[Convergent]
+  The $k$-th \emph{convergent} of $[a_0; a_1, \ldots, a_n]$ is
+  $x_k = p_k / q_k$ where the numerator--denominator pairs satisfy the recurrence
+  \begin{equation}\label{eq:recurrence}
+    \begin{pmatrix} p_k \\ q_k \end{pmatrix}
+    = a_k \begin{pmatrix} p_{k-1} \\ q_{k-1} \end{pmatrix}
+    + \begin{pmatrix} p_{k-2} \\ q_{k-2} \end{pmatrix}
+  \end{equation}
+  with initial conditions $p_{-1} = 1$, $p_0 = a_0$, $q_{-1} = 0$, $q_0 = 1$.
+\end{definition}
+
+\subsection{Implementation}
+
+\texttt{FinateSimpleContinuedFraction.\_convergent} implements \cref{eq:recurrence}
+recursively, re-indexed so that \texttt{body[0]} $= a_1$, \texttt{body[k]} $= a_{k+1}$.
+The base cases in the code are:
+\begin{align*}
+  n=0: &\quad (p_0, q_0) = (1,\; a_1),  \\
+  n=1: &\quad (p_1, q_1) = (a_2,\; a_1 a_2 + 1).
+\end{align*}
+
+\begin{remark}[Design decision: body-indexed convergents]
+The \texttt{convergent(n)} method indexes into \texttt{body}, so $n$ ranges from $0$ to
+$\texttt{size}-1$ where $\texttt{size} = |\texttt{body}|$.
+The actual rational value requires adding \texttt{head} to $p/q$, which is what
+\texttt{convergent\_as\_float} does.
+This separation keeps the convergent arithmetic clean and free of a sign-carrying integer part.
+\end{remark}
+
+\subsection{Key Properties}
+
+\begin{proposition}[Determinant formula]
+  For any $k \geq 0$:
+  \[
+    p_{k-1} q_k - p_k q_{k-1} = (-1)^k.
+  \]
+  In particular $\gcd(p_k, q_k) = 1$ for all $k$.
+\end{proposition}
+
+\begin{proposition}[Best rational approximation]
+  The convergents $p_k/q_k$ are the \emph{best rational approximations} to the
+  represented rational in the sense that no fraction with denominator $\leq q_k$
+  approximates the value better than $p_k/q_k$.
+\end{proposition}
+
+\begin{remark}
+  The best-approximation property motivates using SCF convergents for high-precision
+  string output: \texttt{convergent\_as\_string} and \texttt{convergent\_float\_as\_string}
+  use \texttt{StringMethod.string\_divition}, which computes a long-division decimal
+  expansion of a convergent pair $(p_k, q_k)$ to an arbitrary number of digits.
+\end{remark}

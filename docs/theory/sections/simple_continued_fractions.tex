@@ -1,0 +1,541 @@
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Simple Continued Fractions\texorpdfstring{\protect\footnotemark}{}}\footnotetext{As with all the other sections, the following is not meant to be an exhaustive 
+treatment of the topic, but rather a sketch of the main results and algorithms related to SCFs that are relevant to \catena. 
+For a more comprehensive treatment, see \cite{khinchin1964} and \cite{rockett1992}.
+}
+% ─────────────────────────────────────────────────────────────────────────────
+
+In the most general sense, a continued fraction is an expression of the form
+\[
+  a_0 + \cfrac{b_1}{a_1 + \cfrac{b_2}{a_2 + \cfrac{b_3}{\ddots}}}
+\]
+where $a_0, a_1, \ldots, a_n$ and $b_1, b_2, \ldots, b_n$, depending on the context, 
+may be assumed to be integers, rational numbers, either real numbers or complex numbers,
+and even functions. For the purposes of \catena, and by extension this document, we 
+we restrict attention to the so-called \textit{simple continued fractions} (SCFs), that is, those 
+where $b_n = 1$ for all $n$ and $a_n$ are integers with $a_1, a_2, \ldots, a_n, \ldots > 0$.\footnote{
+    In the literature is common to allow $a_0 \in \R$ (for instance, see \cite{khinchin1964}), 
+    but for the sake of avoiding floating-point arithmetic, as well as to gain a notion of uniqueness,
+    we will restrict it to $\Z$. If nothing more, we do not lose much generality since any real number 
+    admits a unique SCF expansion with integer part $a_0 = \lfloor x \rfloor$ and fractional part 
+    $x - a_0 = 1/(a_1 + 1/(a_2 + \ldots))$. While we won't stop to prove it here, 
+    it is worth noting that the SCF expansion of a rational number is finite, while that of an 
+    irrational number is infinite.
+} Namely, we are left with expressions of the form
+\[
+  a_0 + \cfrac{1}{a_1 + \cfrac{1}{a_2 + \cfrac{1}{\ddots}}}
+\]
+with $a_0 \in \Z$ and $a_1, a_2, \ldots, a_n, \ldots \in \Zp$. For brevity, it is common to write this 
+expression as $[a_0;\, a_1, a_2, \ldots, a_n, \ldots]$. The $a_n$ are called the \textit{partial quotients} 
+of the SCF, and the $n$-th \textit{convergent} is the rational number obtained by truncating the 
+expansion at $a_n$, that is, $[a_0;\, a_1, a_2, \ldots, a_n]$.
+
+As any sequence of indexable objects, one could represent an SCF as a function $f: \N \to \Z$ such that 
+$f(0) \in \Z$ and $f(n) \in \Zp$ for $n > 0$, thereby encoding the entire expansion uniformly within a 
+single map. However, as suggested by the standard notation $[a_0;\, a_1, a_2, \ldots]$, it is often 
+conceptually and computationally advantageous to distinguish and separate the integer part from the 
+remaining partial quotients.
+
+Accordingly, in this work we adopt a split representation: we treat the first partial quotient $a_0 \in \Z$ 
+as the \textit{integer part} of the SCF, and encode the remaining coefficients via a generator $f: \N \to \Zp$ 
+where $f(n) = a_{n+1}$. This distinction is not merely notational; it reflects how SCFs are 
+constructed and manipulated algorithmically in \catena, and will play a central role in the 
+implementations developed in the following sections.
+
+\subsection{Core concepts and implementations}
+
+\begin{definition}[Generating Function]
+  Let $I \in \N \cup \{\N\}$. A \textit{generator} indexed by $I$ is any function 
+  $g: I \to \Zp$. 
+  
+  When $I = \N$, we say that $g$ is an \textit{infinite generator}, and when 
+  $I \in \N$, we say that $g$ is a \textit{finite generator}. Furthermore, in the finite case, we can say that $g$ is 
+  a I\textit{th-order} generator.
+\end{definition}
+
+\begin{remark}
+    Note we allow $I = 0$. In this case, the generator is vacuous and the corresponding SCF reduces to $[a_0]$ for some $a_0 \in \Z$.
+\end{remark}
+
+\begin{catenadef}[\texttt{Generator}, \texttt{CachedGenerator}, \texttt{FiniteGenerator}]
+\begin{lstlisting}[style=python]
+from catena.generators import Generator, CachedGenerator, FiniteGenerator
+
+# Infinite generator: every partial quotient equals 2 (body of sqrt(2) = [1; 2, 2, 2, ...])
+gen = Generator(lambda n: 2)
+
+# CachedGenerator is appropriate when g(n) is expensive and will be queried
+# repeatedly, or when the same generator is shared across several SCF
+# instances.  It memoises each top-level call in an OrdinalCache and exposes
+# catena's cache introspection layer (call_count, read_count, reset_cache).
+# Example: g(n) = number of divisors of (n+2) that do not exceed sqrt(n+2)
+import math
+def small_divisors(n):
+    m = n + 2
+    return sum(1 for d in range(1, int(math.isqrt(m)) + 1) if m % d == 0)
+
+cgen = CachedGenerator(small_divisors)
+cgen(100)          # computes small_divisors(100), stores result
+cgen(100)          # O(1) cache hit
+cgen.call_count    # 1  (one miss)
+cgen.read_count    # 1  (one hit)
+# See the Caching section for the full cache infrastructure.
+
+# Finite generator: body partial quotients of pi = [3; 7, 15, 1, 292, ...]
+# The integer part 3 is stored separately in the SCF, not in the generator.
+fgen = FiniteGenerator([7, 15, 1, 292, 1, 1, 1, 2])  # a_1 ... a_8
+fgen(0)   # 7   (a_1)
+fgen(3)   # 292 (a_4)
+fgen(10)  # raises IndexError (only indices 0--7 are defined)
+\end{lstlisting}
+\end{catenadef}
+
+
+\begin{definition}[Simple Continued Fraction]
+  A \textit{simple continued fraction} is an expression of the form
+  \[
+    x = a_0 + \cfrac{1}{a_1 + \cfrac{1}{a_2 + \cfrac{1}{\ddots}}}
+  \]
+  where $a_0$ is an integer and $a_1, a_2, \ldots, a_n, \ldots$ are positive integers. Thus,
+  given $a_0 \in \Z$ and a generator $g: I \to \Zp$, such that $g(n) = a_{n+1}$, we represent the SCF as
+  the ordered pair $x = (a_0, g)$.
+\end{definition}
+
+\begin{catenadef}[\texttt{SimpleContinuedFraction}, \texttt{FiniteSimpleContinuedFraction}]
+\begin{lstlisting}[style=python]
+from catena import SimpleContinuedFraction, FiniteSimpleContinuedFraction
+
+# Infinite SCF: golden ratio phi = [1; 1, 1, 1, ...]
+phi = SimpleContinuedFraction(lambda n: 1, integer_part=1)
+
+# Finite SCF: 355/113 = [3; 7, 16]
+scf = FiniteSimpleContinuedFraction.from_rational((355, 113))
+scf.integer_part # 3
+scf.generator    # FiniteGenerator([7, 16])
+\end{lstlisting}
+\end{catenadef}
+
+\begin{definition}[Segment]
+    Let $x = (a_0, g)$ be a simple continued fraction, where $g: I \to \Zp$ is a generator. We 
+    define the \textit{segment} of $x$ at index $n \in I$ as the SCF obtained by truncating the first 
+    $n$ partial quotients from $g$. 
+    
+    Formally, for $n \in I$, the segment of $x$ at index $n$ is
+    given by $x_n = (a_0, g_n)$, where $g_n := g|_n$ is the restriction of $g$ to $n$,
+    i.e.\ the function with domain $\{0, 1, \ldots, n-1\}$ satisfying $g_n(k) = g(k)$.
+\end{definition}
+
+\begin{remark}
+  In particular, $x_0 = (a_0, \varnothing)$ is the degenerate finite SCF with no body
+  partial quotients, representing the integer $a_0$ itself.
+  For $n \geq 1$, $x_n = [a_0;\, g(0), g(1), \ldots, g(n-1)]$.
+\end{remark}
+
+\begin{catenadef}[\texttt{SimpleContinuedFraction.segment}]
+\begin{lstlisting}[style=python]
+from catena import SimpleContinuedFraction
+
+# Example: for phi = [1; 1, 1, 1, ...], the segment at index n is also phi
+phi = SimpleContinuedFraction(lambda n: 1, integer_part=1)
+phi.segment(0) # [1;]
+phi.segment(1) # [1; 1]
+phi.segment(10) # [1; 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+\end{lstlisting}
+\end{catenadef}
+
+\begin{remark}
+    Given that the segment is defined for $n \in I$, for finite SCFs, the segment is only defined 
+    for $n \leq \text{size}$. For $n > \text{size}$, the segment is not defined since it would 
+    require access to partial quotients that do not exist in the finite generator. Therefore, 
+    in the finite case, calling \texttt{segment(n)} with $n > \text{size}$ will raise an \texttt{IndexError}.
+
+    As for \texttt{segment(size)}, \texttt{self.shift(0)} is returned since the segment at
+    index \texttt{size} corresponds to the original SCF itself.  \texttt{shift(0)} creates a
+    new \texttt{FiniteSimpleContinuedFraction} that shares the same \texttt{FiniteGenerator}
+    and convergent cache as \texttt{self}, but with \texttt{integer\_part} unchanged (shifting
+    by zero).  This avoids a deep copy while preserving the immutability contract.
+\end{remark}
+
+\begin{definition}[Remainder]
+    Let $x = (a_0, g)$ be a simple continued fraction, where $g: I \to \Zp$. 
+    For $n \in I$, we define the \textit{remainder} of $x$ at index $n$ as the SCF
+    \[
+        r_n(x) = (g(n), h),
+    \]
+    where $h: J \to \Zp$, with $J$ the ordinal $|I \setminus \{0,1,\ldots,n\}|$, is
+    defined by $h(m) = g(m + n + 1)$.  Concretely, $J$ is identified with
+    $I \setminus \{0, 1, \ldots, n\}$ via the shift $m \mapsto m + n + 1$.
+\end{definition}
+
+\begin{remark}
+    As of now, \catena does not have a dedicated implementation for remainders. We mention them 
+    here because they will come up in some of the theoretical results.
+\end{remark}
+
+\begin{definition}[Convergent]
+    Let $x = (a_0, g)$ be a simple continued fraction, where $g: I \to \Zp$. 
+    For $n \in I$, we define the $n$-th \textit{convergent} of $x$ as the rational number
+    \[
+        c_n = \frac{p_n}{q_n}
+    \]
+    given by the value of the segment $x_n$.
+\end{definition}
+
+\begin{remark}[Segment vs Convergent]
+    The segment $x_n$ is itself a (finite) SCF, while the convergent $\nicefrac{p_n}{q_n}$ 
+    is a rational number. They are related by evaluation: $x_n$ represents 
+    $\nicefrac{p_n}{q_n}$, and every rational number admits a unique finite SCF expansion 
+    of this form.
+\end{remark}
+
+\begin{definition}[Tail]
+    Let $x = (a_0, g)$ be a simple continued fraction, where $g: I \to \Zp$. For $n \in I$, the 
+    \textit{tail} of $x$ is the SCF given by $t(x) = (0, g)$. This is to say, the tail of $x$ is the SCF 
+    corresponding to the fractional part of $x$, $\{x\}$.
+
+    Likewise, the n\textit{-th tail convergent} of $x$ is the $n$-th convergent of $t(x)$.
+\end{definition}
+
+\begin{catenadef}[\texttt{SimpleContinuedFraction.tail}]
+\begin{lstlisting}[style=python]
+from catena import SimpleContinuedFraction
+
+# Example: for phi = [1; 1, 1, 1, ...], the tail is also phi
+phi = SimpleContinuedFraction(lambda n: 1, integer_part=1)
+phi.tail() # [0; 1, 1, 1, ...]
+
+phi.tail_convergent(7) # 21/34
+phi.tail().convergent(7) # 21/34
+\end{lstlisting}
+\end{catenadef}
+
+\begin{theorem}[Recurrence Relations for Tail Convergents\footnote{
+    See, for instance, \cite{khinchin1964}, Theorem 1, p. 4.
+    For a more general version of this result, see \cite{jonesthron1980}, Theorem 2.1, p. 22.
+    }]
+    Let $x = (a_0, g)$ be a simple continued fraction, where $g: I \to \Zp$. 
+    For $n \in I$, define the $n$-th tail convergent by
+    \[
+        \frac{h_n}{k_n}
+        =
+        [0;\, g(0), g(1), \ldots, g(n)].
+    \]
+    Then the numerators and denominators satisfy the recurrence relations
+    \[
+        h_n = g(n)\, h_{n-1} + h_{n-2}, \quad 
+        k_n = g(n)\, k_{n-1} + k_{n-2} \qquad (n \geq 0),
+    \]
+    with initial conditions
+    \[
+        h_{-2} = 1,\quad h_{-1} = 0, \qquad
+        k_{-2} = 0,\quad k_{-1} = 1.
+    \]
+\end{theorem}
+
+\begin{remark}
+  We extend the indexing of the sequences $(h_n)$ and $(k_n)$ to include 
+  the values $n = -2$ and $n = -1$, with
+  \[
+      h_{-2} = 1,\quad h_{-1} = 0, \qquad
+      k_{-2} = 0,\quad k_{-1} = 1.
+  \]
+  These values should be understood as formal initial conditions for the 
+  recurrence, rather than as convergents. This convention allows the 
+  recurrence relations to hold uniformly for all $n \geq 0$ without requiring 
+  special cases, which is convenient for implementation.
+\end{remark}
+
+\begin{corollary}[Convergent from Tail Convergents]
+    Let $x = (a_0, g)$ be a simple continued fraction, and let 
+    $\frac{h_n}{k_n} = [0;\, g(0), \ldots, g(n)]$ be the $n$-th tail convergent. 
+    Then the $n$-th convergent of $x$ is given by
+    \[
+        c_n = \frac{p_n}{q_n} = a_0 + \frac{h_n}{k_n}
+        = \frac{a_0 k_n + h_n}{k_n}.
+    \]
+\end{corollary}
+
+\begin{remark}[Caching Tail Convergents]
+    The recursive nature of the tail convergents makes them ideal candidates for caching. 
+    By storing previously computed tail convergents, we can avoid redundant calculations 
+    and significantly improve the efficiency of algorithms that rely on them. A pretty direct
+    example would be the scenario of iterating over the convergents of a given SCF: 
+    by caching the tail convergents, we can compute each new convergent in constant time after 
+    an initial linear time setup, rather than having to recompute the entire tail convergent 
+    from scratch for each new convergent.
+\end{remark}
+
+\begin{catenadef}[\texttt{SimpleContinuedFraction.tail\_convergent}]
+\begin{lstlisting}[style=python]
+    from catena import SimpleContinuedFraction
+
+    # All SCFs have a dedicated cache for tail convergents.
+    phi = SimpleContinuedFraction(lambda n: 1, integer_part=1)
+
+    phi.cache_handler # CacheHandler for tail convergents; owns the cache and handles caching logic.
+    phi.tail_convergent(0) # computes and caches the 0-th tail convergent (1/1)
+    phi.tail_convergent(1) # computes and caches the 1-st tail convergent (1/2), reusing the 0-th tail convergent from cache
+    
+    tail = phi.tail() # the tail is also phi, so it shares the same cache of tail convergents
+    tail.cache_handler is phi.cache_handler # True
+    tail.tail_convergent(1) # retrieves the 1-st tail convergent from cache (1/2)
+\end{lstlisting}
+\end{catenadef}
+
+\begin{remark}[Shared \texttt{tail\_convergent} Callable]
+  \texttt{tail()} uses \texttt{\_from\_shared}, which copies the reference
+  to \texttt{\_cache\_handler} \emph{and} to the \texttt{SetLightCache}-wrapped
+  \texttt{tail\_convergent} callable.  Since the cache lives in
+  \texttt{cache\_handler}, both objects read from and write to the
+  same \texttt{OrdinalCache} instance, giving true shared memoisation.
+  This is why \texttt{tail.tail\_convergent(1)} above retrieves a cached
+  value rather than recomputing it.
+\end{remark}
+
+In the literature, tail convergents are typically not introduced explicitly, 
+as they are not of primary theoretical interest. However, they provide a useful 
+computational tool. In particular, they allow distinct SCFs to share both the 
+same generator and the same cache of previously computed values, thereby 
+avoiding redundant computations and improving efficiency.
+
+Another point of divergence from the standard presentation is the indexing of 
+convergents. In the literature, the $n$-th convergent is often defined as 
+$[a_0;\, a_1, \ldots, a_n]$, which corresponds to our $(n-1)$-th convergent. 
+We instead adopt zero-based indexing to reflect the conventions of Python, so 
+that the first tail convergent corresponds to 
+\[
+    [0; g(0)] =  \frac{1}{g(0)} = \frac{1}{a_1}.
+\]
+While minor, this distinction is worth keeping in mind when comparing results 
+with the classical literature.
+
+\begin{remark}[RecursionError for Negative Indices]
+    The recurrence relations for tail convergents are only defined for $n \geq 0$, and the seed values are defined for $n = -1$ and $n = -2$.
+    Therefore, if the recurrence is called with $n < -2$, it indicates a logic error in the implementation, as it would require access to
+    tail convergents that are not defined.
+
+    In \catena, this condition raises a \texttt{RecursionError}.  Python's \texttt{RecursionError} is
+    conventionally associated with call-stack exhaustion, but here it is repurposed to signal that
+    the recurrence has descended below its valid base cases — a situation that can only arise from
+    a logic error upstream, not from a bad user-supplied argument.  An alternative design would use
+    \texttt{ValueError}; the current choice is a deliberate signal that the error is structural
+    (a malformed recursive call) rather than an invalid input.
+\end{remark}
+
+\subsubsection{Some useful properties of convergents}
+
+\begin{theorem}[Determinant Identity for Convergents\footnote{See, for instance, \cite{khinchin1964}, Theorem 1, p. 4.}]
+    Let $x = (a_0, g)$ be a simple continued fraction, where $g: I \to \Zp$. 
+    For $n \in I$, let $\frac{p_n}{q_n}$ be the $n$-th convergent of $x$. Then the following identity holds:
+    \[
+        p_n q_{n-1} - p_{n-1} q_n = (-1)^{n+1} \qquad (n \in I).
+    \]
+\end{theorem}
+
+\begin{corollary}[Coprimality of Convergents]
+    \label{coro:coprimality}
+    Let $x = (a_0, g)$ be a simple continued fraction, where $g: I \to \Zp$. 
+    For $n \in I$, let $\frac{p_n}{q_n}$ be the $n$-th convergent of $x$. Then $p_n$ and $q_n$ are 
+    coprime for all $n \in I$; that is,
+    \[
+        \gcd(p_n, q_n) = 1 \qquad (n \in I).
+    \]
+\end{corollary}
+
+\begin{proof}
+    From the determinant identity,
+    \[
+        p_n q_{n-1} - p_{n-1} q_n = (-1)^{n+1},
+    \]
+    any common divisor of $p_n$ and $q_n$ must divide the left-hand side, and hence divide $(-1)^{n+1}$. 
+    Therefore, $\gcd(p_n, q_n) = 1$.
+\end{proof}
+
+\begin{remark}
+    In particular, each convergent is already expressed in lowest terms. This justifies 
+    the design choice of not delegating convergent arithmetic to the \texttt{Fraction} 
+    class from the Python standard library, which would redundantly attempt to reduce 
+    fractions.
+
+    Since the recurrence relations preserve coprimality automatically, it is more 
+    efficient to maintain numerators and denominators directly, avoiding both the 
+    overhead of normalization and the cost of repeatedly instantiating \texttt{Fraction} 
+    objects. Many other algorithms in \catena\ inherit this property as well, allowing 
+    coprimality to be preserved without additional (and redundant) computation.
+\end{remark}
+
+\begin{corollary}[Difference of Consecutive Convergents]
+    \label{coro:difference_consecutive_convergents}
+    Let $x = (a_0, g)$ be a simple continued fraction, where $g: I \to \Zp$. 
+    For $n \in I$, let $\frac{p_n}{q_n}$ be the $n$-th convergent of $x$. Then the following identity holds:
+    \[
+        \frac{p_n}{q_n} - \frac{p_{n-1}}{q_{n-1}} = \frac{(-1)^{n+1}}{q_n q_{n-1}} \qquad (n \in I).
+    \]
+\end{corollary}
+
+\begin{theorem}
+    Let $x = (a_0, g)$ be a simple continued fraction, where $g: I \to \Zp$. 
+    For $n \in I$, let $\frac{p_n}{q_n}$ be the $n$-th convergent of $x$. Then the following identity holds:
+    \[
+        p_n q_{n-2} - p_{n-2} q_n = (-1)^n g(n) \qquad (n \in I, n \geq 1).
+    \]
+\end{theorem}
+
+\begin{corollary}
+    Let $x = (a_0, g)$ be a simple continued fraction, where $g: I \to \Zp$. 
+    For $n \in I$, let $\frac{p_n}{q_n}$ be the $n$-th convergent of $x$. Then the following identity holds:
+    \[
+        \frac{p_n}{q_n} - \frac{p_{n-2}}{q_{n-2}} = \frac{(-1)^n g(n)}{q_n q_{n-2}} \qquad (n \in I, n \geq 1).
+    \]
+\end{corollary}
+
+\begin{theorem}[Monotonicity and Convergence of Convergents]
+    Let $x = (a_0, g)$ be a simple continued fraction, where $g: I \to \Zp$. 
+    For $n \in I$, let $\frac{p_n}{q_n}$ be the $n$-th convergent of $x$. Then the following properties hold:
+    \begin{enumerate}
+        \item The sequence of convergents alternates around $x$: for even $n$, we have $c_n > x$, while for odd $n$, we have $c_n < x$.\footnote{
+            Due to our indexing convention (where $c_0 = [a_0;\, a_1]$), the parity of the alternating
+            inequalities is reversed relative to some standard references.
+        }   
+        \item The sequence of convergents is strictly decreasing for even indices and strictly increasing for odd indices.
+        \item The sequence of convergents converges to $x$ as $n \to \infty$ (if $I = \N$).
+    \end{enumerate}
+\end{theorem}
+
+\begin{remark}
+    The monotonicity and convergence properties of convergents are fundamental to their role as approximations of the original SCF. 
+    The alternating nature of the sequence ensures that each new convergent provides a better approximation than the previous one, 
+    while the convergence guarantees that we can get arbitrarily close to $x$ by taking sufficiently many convergents.
+
+    This is, among other things, the theoretical basis for being able to define a generic \texttt{\_\_float\_\_} method for SCFs, 
+    which is implemented in \catena\ as the value of a fixed convergent call. Namely, \texttt{.convergent(50)} is used as the 
+    default approximation for the float value of an arbitrary SCF. The \texttt{machine\_epsilon} constant from the 
+    Python standard library is usually around $2^{-52} \approx 2.22 \times 10^{-16}$, so the 50-th 
+    convergent of any SCF will be accurate to well within machine precision. A heuristic train of thought for this choice 
+    is as follows: since the sequence of convergents alternates around $x$ and converges to $x$, we 
+    focus on the value of the difference between the $n$-th convergent and $(n-1)$-th convergent, which, per Corollary \ref{coro:difference_consecutive_convergents}, is given by
+    \[
+        \left| \frac{p_n}{q_n} - \frac{p_{n-1}}{q_{n-1}} \right| = \frac{1}{q_n q_{n-1}}.
+    \]
+    On the other hand, the slowest growth rate for the denominators of convergents is given by the Fibonacci sequence, 
+    which corresponds to the case where $g(n) = 1$ for all $n$. In this case, we can compute that
+    \[
+        \frac{1}{q_{50} q_{49}} = \frac{1}{20365011074 \cdot 32951280099} = \frac{1}{671053184118610816326} \approx 1.49 \times 10^{-21}.
+    \]
+    Therefore, even in the worst-case scenario, the 50-th convergent will be accurate to well within machine precision.
+\end{remark}
+
+\begin{catenadef}[\texttt{SimpleContinuedFraction.\_\_float\_\_}]
+\begin{lstlisting}[style=python]
+from catena import SimpleContinuedFraction
+
+# Example: for phi = [1; 1, 1, 1, ...], the float value is approximately 1.618033988749895
+phi = SimpleContinuedFraction(lambda n: 1, integer_part=1)
+
+# We can call float() on phi directly.
+float(phi) # approximately 1.618033988749895
+\end{lstlisting}
+\end{catenadef}
+
+\begin{remark}[No \texttt{to\_decimal} for Infinite SCFs]
+  The finite SCF class provides a \texttt{to\_decimal} method that returns an
+  exact arbitrary-precision \texttt{Decimal} value (see
+  \S\ref{sec:finite_scf}).  No analogous method is defined on
+  \texttt{SimpleContinuedFraction}.
+
+  The reason is that \texttt{to\_decimal} requires choosing \emph{which}
+  convergent to evaluate, and for a finite SCF there is a canonical choice:
+  the terminal convergent, which is the exact rational value.
+  For an infinite SCF no such canonical convergent exists — the sequence of
+  convergents converges to $x$, but every individual convergent is only an
+  approximation.  Any fixed index $n$ would give an answer whose precision
+  depends on $n$ and on the specific SCF, with no guarantee of meeting
+  a caller-supplied precision target.
+
+  By contrast, \texttt{\_\_float\_\_} commits to IEEE\,754 double precision
+  ($\approx 2^{-52}$), which is fixed by the hardware; convergent\,(50) is
+  always sufficient (see the remark above).  For truly arbitrary-precision
+  output the caller should use \texttt{segment($n$).to\_decimal()} for a
+  chosen $n$, making the precision trade-off explicit.
+\end{remark}
+
+\begin{theorem}[Evaluation from Remainder\footnote{See \cite{khinchin1964}, Theorem 5, p. 7 \& Theorem 7, p. 8.}]
+    Let $x = (a_0, g)$ be a simple continued fraction, where $g: I \to \Zp$. 
+    For $n \in I$, let $\frac{p_n}{q_n}$ be the $n$-th convergent of $x$, and let $r_n$ be the $n$-th
+    remainder of $x$. Then the following identity holds:
+    \[
+        x = \frac{p_{n-1}r_n + p_{n-2}}{q_{n-1}r_n + q_{n-2}} \qquad (n \in I).
+    \]
+\end{theorem}
+
+\begin{remark}
+  In this theorem $r_n$ denotes the \emph{value} of the $n$-th remainder SCF
+  $r_n(x) = (g(n),\, h)$ as a real number, not the SCF object itself.
+  The identity then follows from the matrix formulation of the recurrence
+  (see, e.g., \cite{khinchin1964}, Theorem 5).
+\end{remark}
+
+\begin{proposition}[SCF of the Multiplicative Inverse]
+  Let $x = (a_0, g)$ be an SCF with $x > 0$.
+  \begin{enumerate}
+    \item If $a_0 = 0$: $x = [0;\, a_1, a_2, \ldots]$ with $a_1 \geq 1$, so
+          $1/x = [a_1;\, a_2, a_3, \ldots]$.
+    \item If $a_0 > 0$: $x = [a_0;\, a_1, a_2, \ldots]$ with $a_0 \in \Zp$, so
+          $1/x = [0;\, a_0, a_1, a_2, \ldots]$.
+  \end{enumerate}
+  In both cases the partial quotients of $1/x$ lie in $\Zp$: in case~1, the
+  new integer part is $a_1 \geq 1$ and the body continues with positive values;
+  in case~2, the body begins with $a_0 \geq 1$.
+
+  The condition $x > 0$ (equivalently $a_0 \geq 0$) is necessary.  If
+  $a_0 < 0$ then $x < 0$, so $1/x < 0$ and its SCF has a negative integer
+  part; this cannot be recovered by the simple generator-prepend trick above,
+  which would place a negative value in a body slot (violating $g: I \to \Zp$).
+  The result is computed by \texttt{SimpleContinuedFraction.inverse}, which
+  stores it in a write-once \texttt{\_inverse} attribute and sets the
+  inverse's own \texttt{\_inverse} back to \texttt{self}, making
+  \texttt{inverse} an involution on cached pairs.
+\end{proposition}
+
+\begin{catenadef}[\texttt{SimpleContinuedFraction.inverse}]
+\begin{lstlisting}[style=python]
+phi = SimpleContinuedFraction(lambda n: 1, integer_part=1)
+# phi = [1; 1, 1, 1, ...] (golden ratio, a_0 = 1 > 0)
+inv_phi = phi.inverse()   # 1/phi = phi - 1 = [0; 1, 1, 1, ...]
+inv_phi.integer_part      # 0
+inv_phi.inverse() is phi  # True  (involution: write-once _inverse points back to self)
+
+# a_0 = 0 case:
+tail_phi = phi.tail()          # [0; 1, 1, 1, ...]
+tail_phi.inverse().integer_part  # 1  (= a_1; inverse is phi itself)
+
+# a_0 < 0: not supported
+neg = SimpleContinuedFraction(lambda n: 1, integer_part=-1)
+neg.inverse()  # raises ValueError
+\end{lstlisting}
+\end{catenadef}
+
+\begin{proposition}[Integer Translation]
+  Let $x = (a_0, g)$ be an SCF and $n \in \Z$.  Then
+  \[
+    x + n = (a_0 + n,\, g).
+  \]
+  That is, adding an integer to an SCF shifts only the integer part,
+  leaving the generator unchanged.  In \catena, this is implemented via
+  \texttt{shift($n$)}, which creates a new instance sharing the same
+  generator and convergent cache.  Both \texttt{scf + n} and
+  \texttt{n + scf} are supported; non-integer arguments return
+  \texttt{NotImplemented}.
+\end{proposition}
+
+\begin{catenadef}[\texttt{SimpleContinuedFraction.\_\_add\_\_}]
+\begin{lstlisting}[style=python]
+phi = SimpleContinuedFraction(lambda n: 1, integer_part=1)
+# phi = [1; 1, 1, 1, ...] (golden ratio)
+shifted = phi + 3       # [4; 1, 1, 1, ...]
+shifted.integer_part    # 4
+3 + phi                 # also [4; 1, 1, 1, ...] (__radd__ is symmetric)
+# Only integer arguments are accepted:
+# phi + 1.5             # returns NotImplemented
+\end{lstlisting}
+\end{catenadef}

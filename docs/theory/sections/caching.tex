@@ -1,0 +1,167 @@
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Caching Strategy}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\subsection{Motivation}
+
+Two separate caching concerns arise in \catena.
+
+\textbf{Tail-convergent caching.}  The recurrence
+\[
+    h_n = g(n)\,h_{n-1} + h_{n-2}, \quad k_n = g(n)\,k_{n-1} + k_{n-2}
+\]
+has optimal substructure: $h_n$ depends on $h_{n-1}$ and $h_{n-2}$.
+Without memoisation a naive recursive implementation recomputes all earlier
+tail convergents each time a later one is requested.  With memoisation each
+value is computed once, reducing the total cost from $O(2^n)$ to $O(n)$.
+All \texttt{SimpleContinuedFraction} instances carry a dedicated
+\texttt{cache\_handler} for this purpose.
+
+\textbf{Generator caching.}  When the partial-quotient function $g: \N \to \Zp$
+is expensive to evaluate (e.g.\ a number-theoretic function or a transcendental
+constant computed digit by digit), re-evaluating $g(n)$ on every recurrence step
+would dominate the runtime.  \texttt{CachedGenerator} wraps an arbitrary callable
+and memoises each distinct index in an \texttt{OrdinalCache}.
+
+\subsection{Cache Primitives}
+
+\catena's caching layer is built from three composable primitives, all defined
+in \texttt{catena.cache}.
+
+\begin{description}[style=nextline]
+  \item[\texttt{Cache} (append-only dictionary).]
+    A subclass of \texttt{UserDict} that overrides \texttt{\_\_setitem\_\_}:
+    once a key is written, any subsequent attempt to overwrite it raises
+    \texttt{KeyError}.  This \emph{immutability-after-write} guarantee is
+    correct for convergents and generator values alike, because both are
+    deterministic functions of their index for a fixed SCF.
+
+  \item[\texttt{OrdinalCache} (integer-keyed cache with range tracking).]
+    A \texttt{Cache} that additionally enforces integer keys and maintains
+    \texttt{smallest\_key} / \texttt{largest\_key} attributes reflecting the
+    currently stored range.  The \texttt{largest\_key} sentinel is used by the
+    tail-convergent iterative fill: the recurrence advances from
+    \texttt{largest\_key + 1} to $n$, computing only the truly missing entries
+    in $O(\text{gap})$ time and $O(1)$ call-stack depth regardless of $n$.
+
+  \item[\texttt{CacheHandler} (bookkeeping wrapper).]
+    Owns a \texttt{Cache} instance and records two counters:
+    \texttt{call\_count} (cache misses — the underlying function was called) and
+    \texttt{read\_count} (cache hits — a stored result was returned).
+    All three internal attributes (\texttt{\_cache}, \texttt{\_call\_count},
+    \texttt{\_read\_count}) are guarded by a custom \texttt{\_\_setattr\_\_} so
+    they cannot be accidentally overwritten.  Two lifecycle methods are provided:
+    \texttt{reset\_cache} replaces the current cache with a fresh empty instance
+    of the same type, and \texttt{prune\_cache(n)} retains only the $n$
+    numerically largest keys, discarding the rest (useful when memory is
+    constrained and only the most recently computed convergents matter).
+\end{description}
+
+\subsection{Memoisation Decorators}
+
+Two function-level memoisation decorators build on \texttt{CacheHandler}.
+
+\begin{description}[style=nextline]
+  \item[\texttt{SetLightCache}.]
+    Wraps a \emph{single-argument} callable.  The sole argument is used
+    directly as the cache key, avoiding the overhead of tuple construction and
+    \texttt{frozenset} hashing.  This is the decorator applied to
+    \texttt{tail\_convergent} on every \texttt{SimpleContinuedFraction} instance
+    and to the inner callable of every \texttt{CachedGenerator}.
+
+  \item[\texttt{SetCache}.]
+    The general multi-argument variant, keying on
+    \texttt{(args, frozenset(kwargs.items()))}.  Used when the wrapped function
+    accepts more than one argument.
+\end{description}
+
+\subsection{Generator-Level Caching: \texttt{CachedGenerator}}
+
+\texttt{CachedGenerator} is a subclass of \texttt{Generator} that internally
+applies \texttt{SetLightCache} (backed by a fresh \texttt{OrdinalCache}) to the
+wrapped callable.  Every call \texttt{cgen(n)} is therefore intercepted by the
+light cache: on a miss the underlying function is called and the result stored;
+on a hit the stored result is returned directly.
+
+\textbf{When to use each generator type.}
+\begin{enumerate}
+  \item \texttt{Generator}: the default.  Wrap any callable $g: \N \to \Zp$
+        that is cheap to evaluate (e.g.\ a closed-form formula).
+  \item \texttt{CachedGenerator}: use when $g(n)$ is expensive \emph{and}
+        catena's cache introspection is needed (\texttt{call\_count},
+        \texttt{read\_count}, \texttt{reset\_cache}, \texttt{OrdinalCache}
+        bookkeeping).  Also the right choice when one expensive generator
+        must be shared across several SCF instances so that all instances
+        draw from the same memoised pool.
+  \item Sharing via \texttt{Generator} wrapping an \texttt{@lru\_cache}-decorated
+        function achieves the same functional sharing without catena's
+        introspection layer.  Use this pattern for recursive functions
+        (Fibonacci, etc.): apply \texttt{@functools.lru\_cache} to the function
+        itself \emph{before} passing it to \texttt{Generator} or
+        \texttt{CachedGenerator}, because \texttt{CachedGenerator} only
+        intercepts top-level calls and does not propagate into self-recursive
+        calls inside the function body.
+  \item \texttt{FiniteGenerator}: use for fixed finite sequences; no caching
+        is needed because lookup is $O(1)$ by array index.
+\end{enumerate}
+
+\begin{catenadef}[Caching Patterns]
+\begin{lstlisting}[style=python]
+from catena.generators import Generator, CachedGenerator
+from catena import SimpleContinuedFraction
+import functools, math
+
+# --- Pattern 1: expensive non-recursive generator ---
+# g(n) = number of divisors of (n+2) not exceeding sqrt(n+2)
+def small_divisors(n):
+    m = n + 2
+    return sum(1 for d in range(1, math.isqrt(m) + 1) if m % d == 0)
+
+cgen = CachedGenerator(small_divisors)
+scf = SimpleContinuedFraction(cgen, integer_part=0)
+scf.convergent(20)       # fills cache entries 0..20 as a side-effect
+cgen.call_count          # 21  (one miss per index)
+cgen.read_count          # 0   (no hits yet from this SCF)
+
+# --- Pattern 2: sharing one cache across multiple SCFs ---
+scf2 = SimpleContinuedFraction(cgen, integer_part=1)
+scf2.convergent(10)      # cgen(0)..cgen(10) are already cached
+cgen.read_count          # 11  (all hits: entries 0..10 were populated by scf)
+
+# --- Pattern 3: recursive generator - pre-memo with lru_cache ---
+@functools.lru_cache(maxsize=None)
+def fib(n):
+    return fib(n - 1) + fib(n - 2) if n > 1 else n + 1
+
+# Wrap in CachedGenerator to add OrdinalCache introspection on top
+cgen_fib = CachedGenerator(fib)     # fib's own lru_cache handles recursion
+cgen_fib(10)                        # fib(10) was already cached by lru_cache
+cgen_fib.call_count                 # 1
+cgen_fib.reset_cache()              # clears OrdinalCache; lru_cache unchanged
+\end{lstlisting}
+\end{catenadef}
+
+\subsection{Shared Caches and the Tail}
+
+All \texttt{tail()}, \texttt{shift()}, and \texttt{segment(size)} operations
+create a new SCF instance via \texttt{\_from\_shared}, which copies the
+\emph{reference} to \texttt{\_cache\_handler} rather than duplicating the cache
+object.  Consequently both the original and the derived SCF read from and write
+to the same \texttt{OrdinalCache}; a tail-convergent computed by one is
+immediately available to the other at zero cost.
+
+This is the mechanism that makes the following hold:
+
+\begin{catenadef}[Shared tail-convergent cache]
+\begin{lstlisting}[style=python]
+from catena import SimpleContinuedFraction
+
+phi = SimpleContinuedFraction(lambda n: 1, integer_part=1)
+phi.tail_convergent(9)             # populates cache entries 0..9
+
+tail = phi.tail()                  # new instance, same cache_handler
+tail.cache_handler is phi.cache_handler   # True
+tail.tail_convergent(9)            # O(1) cache hit -- no recomputation
+phi.cache_handler.read_count       # incremented by the hit above
+\end{lstlisting}
+\end{catenadef}

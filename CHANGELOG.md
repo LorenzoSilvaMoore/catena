@@ -29,6 +29,20 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
   Stack depth is now O(1) regardless of *n*; `RecursionError` on large indices
   is no longer possible.
 
+### Documentation
+
+- **Theory paper v1.0.0** (`docs/theory/`) — first complete draft covering all
+  implemented classes.  Sections added or substantially rewritten: infinite SCFs
+  (generator model, inverse, integer translation, caching remarks), finite SCFs
+  (dual-representation, canonical form, IEEE 754 and `to_decimal`), caching
+  (full rewrite: primitives, decorators, generator-level decision guide),
+  periodic SCFs (new section: two-generator data model, purely-periodic
+  unification, deferred algebraic methods), notation (3-column table with
+  `catena` attribute column), introduction (ℕ/ℤ⁺ remark, stale bullets removed).
+- GitHub Actions workflow compiles `main.tex` with `latexmk` and deploys
+  `catena-theory.pdf` to GitHub Pages on every push to `docs/theory/`.
+- README links to the hosted PDF.
+
 ---
 
 ## [0.2.0] — 2026-05-03

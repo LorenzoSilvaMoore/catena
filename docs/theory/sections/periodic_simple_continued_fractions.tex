@@ -1,0 +1,214 @@
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Periodic Simple Continued Fractions}
+% ─────────────────────────────────────────────────────────────────────────────
+
+By Lagrange's theorem, a real number has an eventually periodic continued
+fraction expansion if and only if it is a \emph{quadratic irrational} — a root
+of a degree-two polynomial with integer coefficients that is not itself
+rational.  The favorite examples are $\sqrt{2} = [1;\,\overline{2}]$,
+$\varphi = [1;\,\overline{1}]$, and more generally every expression of the
+form $(P + \sqrt{D})/Q$ with $D$ not a perfect square.
+This section introduces \texttt{PeriodicSimpleContinuedFraction}, the \catena
+class that represents such numbers exactly and exposes their structure through
+the same functional interface used by \texttt{SimpleContinuedFraction}.
+The deeper theory — the proof of Lagrange's theorem, the correspondence with
+Pell equations, and the algebraic operations on quadratic irrationals — is
+deferred to a forthcoming section.
+
+\subsection{Purely periodic vs.\ eventually periodic}
+
+\begin{definition}[Eventually periodic SCF]
+  An infinite SCF $(a_0, g)$ with $g: \N \to \Zp$ is
+  \emph{eventually periodic} if there exist integers $m \geq 0$ and $r \geq 1$
+  such that
+  \[
+    g(m + k) = g(m + k + r) \qquad \text{for all } k \geq 0.
+  \]
+  The smallest such $r$ is the \emph{minimal period length} and the
+  corresponding block $(g(m), \ldots, g(m+r-1))$ is the \emph{period}.
+  The block $(g(0), \ldots, g(m-1))$ (empty when $m = 0$) is the
+  \emph{pre-period}.
+  When $m = 0$ the SCF is \emph{purely periodic} (its body repeats from the
+  very first partial quotient).
+\end{definition}
+
+In \catena there is no distinction between the two at the type level.
+Both are represented by a single class, \texttt{PeriodicSimpleContinuedFraction},
+instantiated with the same constructor.  The difference is entirely
+encoded by the pre-period length $m$: a purely periodic PSCF is simply
+one where $m = 0$, so that $g_{\mathrm{pre}}$ has an empty domain and
+contributes no partial quotients.  In Definition~\ref{def:pscf} this means
+the case-split collapses to $g(n) = g_{\mathrm{per}}(n \bmod r)$ for all
+$n \geq 0$, and the \texttt{pre\_period} argument to the constructor is
+omitted (or passed as an empty sequence).
+
+\begin{remark}
+  Some sources define ``purely periodic'' to include $a_0$ in the repeating
+  block, writing $[\overline{a_0;\,a_1,\ldots,a_{r-1}}]$.  In \catena the
+  integer part $a_0$ is always stored separately and is never part of a
+  periodic block.  ``Purely periodic'' here refers to the body $g$ alone:
+  $m = 0$ means the body repeats from index~$0$, regardless of the value
+  of $a_0$.
+\end{remark}
+
+\subsection{The integer-part separation and its effect on the period}
+
+Because $a_0$ is stored outside the generator, the period reported by
+\texttt{PeriodicSimpleContinuedFraction} is always the period of the
+\emph{body generator} $g$, not of the full sequence $(a_0, a_1, a_2, \ldots)$.
+This can shift the apparent repeating block relative to a naive reading of the
+expansion.
+
+\begin{example}
+  Consider $x = [3;\,\overline{1,3}]$.  Written out, the partial quotients are
+  $3,\,1,\,3,\,1,\,3,\ldots$  The digits $3$ and $1$ alternate, so one might
+  expect the period to be $(3, 1)$.  However, $a_0 = 3$ is the integer part and
+  is stored separately; the body sequence is $1, 3, 1, 3, \ldots$, which has
+  period $(1, 3)$.  The number $[\overline{3,1}]$ (in the sense of a purely
+  periodic expansion starting from $a_0$) is the same value — the two
+  representations differ only in where the period is ``cut'' — but \catena
+  always extracts $a_0 = \lfloor x \rfloor$ first, so the stored period is
+  $(1, 3)$ in both cases.
+\end{example}
+
+This is not a limitation but a deliberate consequence of the uniform
+representation: the integer part is always an integer, the body generator
+always maps into $\Zp$, and the two are never mixed.
+
+\subsection{Definition and data model}
+
+\begin{definition}[Periodic simple continued fraction]
+  \label{def:pscf}
+  A \emph{periodic simple continued fraction} (PSCF) is an eventually
+  periodic SCF $(a_0, g)$ whose body generator $g: \N \to \Zp$ is determined
+  by two finite generators
+  \begin{align*}
+    g_{\mathrm{pre}} &: m \longrightarrow \Zp, \\
+    g_{\mathrm{per}} &: r \longrightarrow \Zp, \quad r \geq 1,
+  \end{align*}
+  via the rule
+  \[
+    g(n) \;=\;
+    \begin{cases}
+      g_{\mathrm{pre}}(n)                              & \text{if } n < m, \\[4pt]
+      g_{\mathrm{per}}\!\bigl((n - m) \bmod r\bigr)   & \text{if } n \geq m.
+    \end{cases}
+  \]
+  Here $m \in \N$ is the \emph{pre-period length} and $r \in \Zp$ is the
+  \emph{period length}.
+  The sequences
+  \[
+    \bigl(g_{\mathrm{pre}}(0),\ldots,g_{\mathrm{pre}}(m-1)\bigr)
+    \qquad\text{and}\qquad
+    \bigl(g_{\mathrm{per}}(0),\ldots,g_{\mathrm{per}}(r-1)\bigr)
+  \]
+  are referred to as the \emph{pre-period} and the \emph{period} of the PSCF
+  respectively.
+\end{definition}
+
+In \catena, $g_{\mathrm{pre}}$ and $g_{\mathrm{per}}$ are each stored as a
+\texttt{FiniteGenerator} — a fixed, immutable array of positive integers backed
+by a compact \texttt{array.array}.  These two \texttt{FiniteGenerator} instances
+are then combined into a single \texttt{PeriodicGenerator}, which implements
+the case-split of Definition~\ref{def:pscf} as its underlying callable.
+\texttt{PeriodicSimpleContinuedFraction} wraps this generator together with the
+integer part $a_0$, and exposes the two sub-generators through the
+\texttt{non\_repeating\_part} and \texttt{period} properties.
+
+\begin{catenadef}[\texttt{PeriodicSimpleContinuedFraction}]
+\begin{lstlisting}[style=python]
+from catena import PeriodicSimpleContinuedFraction as PSCF
+
+# phi = [1; 1,1,1,...] -- golden ratio, purely periodic body (m = 0)
+phi = PSCF(period=[1], integer_part=1)
+print(phi.integer_part)        # 1
+print(phi.period)              # (1,)
+print(phi.non_repeating_part)  # ()
+
+# sqrt(2) = [1; 2,2,2,...] -- purely periodic body (m = 0)
+sqrt2 = PSCF(period=[2], integer_part=1)
+
+# [3; 1,3,1,3,...] -- the body period is (1,3), not (3,1)
+x = PSCF(period=[1, 3], integer_part=3)
+print(x.period)              # (1, 3)
+print(x.non_repeating_part)  # ()
+
+# (7 + sqrt(10))/4 = [2; 1,1, 5,1,1,1,24,1,1,1,5,...]
+# non-repeating pre-period (1,1) followed by period (5,1,1,1,24,1,1,1)
+y = PSCF(period=[5, 1, 1, 1, 24, 1, 1, 1], pre_period=[1, 1], integer_part=2)
+print(y.non_repeating_part)  # (1, 1)
+print(y.period)              # (5, 1, 1, 1, 24, 1, 1, 1)
+\end{lstlisting}
+\end{catenadef}
+
+\subsection{Inherited and additional methods}
+
+\texttt{PeriodicSimpleContinuedFraction} inherits all of
+\texttt{SimpleContinuedFraction} without change.  In particular,
+\texttt{convergent}, \texttt{tail\_convergent}, \texttt{tail},
+\texttt{segment}, \texttt{shift}, and \texttt{\_\_add\_\_} all work on a
+PSCF exactly as described in the SCF section, since the underlying
+\texttt{PeriodicGenerator} is just another callable $g: \N \to \Zp$.
+The convergent cache and the tail-sharing machinery are likewise inherited
+unchanged.
+
+The following members are added or overridden by the class.
+
+\begin{description}[leftmargin=2em, style=nextline]
+  \item[\texttt{non\_repeating\_part}, \texttt{period}]
+    Read-only properties returning the pre-period
+    $(g_{\mathrm{pre}}(0),\ldots,g_{\mathrm{pre}}(m-1))$ and the period
+    $(g_{\mathrm{per}}(0),\ldots,g_{\mathrm{per}}(r-1))$ as immutable
+    tuples.
+
+  \item[\texttt{from\_quadratic\_surd(P, Q, D)}]
+    Class method.  Constructs a PSCF whose value is $(P + \sqrt{D})/Q$ by
+    running the quadratic-surd expansion algorithm and forwarding the
+    resulting pre-period, period, and integer part to the constructor.
+    This is the factory used internally by \texttt{inverse} and
+    \texttt{conjugate}.
+
+  \item[\texttt{\_\_float\_\_} (override)]
+    Returns \texttt{(P + D**0.5) / Q} from the cached
+    \texttt{quadratic\_surd()} triple.  Unlike
+    \texttt{SimpleContinuedFraction.\_\_float\_\_}, which evaluates
+    \texttt{convergent(50)}, the periodic override is exact up to
+    IEEE\,754 rounding in a single arithmetic expression, exploiting the
+    closed-form surd representation.
+
+  \item[\texttt{as\_decimal()}]
+    Returns the value as an arbitrary-precision \texttt{Decimal} via
+    \texttt{Decimal(D).sqrt()}.  This is the periodic analogue of
+    \texttt{FiniteSimpleContinuedFraction.to\_decimal()}: both are exact
+    up to the current \texttt{decimal} context precision, but here
+    exactness comes from the algebraic form rather than from evaluating the
+    terminal convergent.
+\end{description}
+
+The following new methods are also implemented but their correctness rests on
+algebraic properties of quadratic irrationals that are not developed in
+this version of the document.  They are listed here for completeness;
+full justification is deferred to a forthcoming section.
+
+\begin{description}[leftmargin=2em, style=nextline]
+  \item[\texttt{quadratic\_coefficients()}]
+    Returns $(A, B, C)$ with $\gcd(A,B,C) = 1$ and $A > 0$ such that the
+    value of the PSCF satisfies $Ax^2 + Bx + C = 0$.
+  \item[\texttt{quadratic\_surd()}]
+    Returns $(P, Q, D)$ such that the value equals $(P + \sqrt{D})/Q$,
+    derived from the quadratic coefficients.
+  \item[\texttt{is\_principal\_surd()}, \texttt{is\_conjugate\_root()}]
+    Predicates distinguishing the two roots of the minimal polynomial,
+    identified by the sign of $Q$.
+  \item[\texttt{inverse()} (override)]
+    Returns $1/x$ as a new PSCF, computed via the surd formula.  Overrides
+    the base-class implementation to exploit the closed form; the
+    write-once involution contract (\texttt{\_inverse.\_inverse is self})
+    is preserved.
+  \item[\texttt{conjugate()}]
+    Returns the algebraic conjugate $(P - \sqrt{D})/Q$, i.e.\ the other
+    root of the same minimal polynomial.
+  \item[\texttt{\_\_neg\_\_()}]
+    Returns $-x$ as a new PSCF via the surd negation $(P,\,-Q,\,D)$. The closed-form surd 
+    representation ensures that the definition of negation is exact, so no approximation is involved.
+\end{description}
