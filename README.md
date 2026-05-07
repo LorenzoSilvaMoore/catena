@@ -18,27 +18,33 @@ A formal write-up of the theory and implementation decisions is available as a P
 
 A simple continued fraction expresses a number as
 
-$$
-a_0 + \cfrac{1}{a_1 + \cfrac{1}{a_2 + \cfrac{1}{\ddots}}}
-\;=\; [a_0;\, a_1, a_2, \ldots]
-$$
+```
+        1
+a₀ + ─────────────
+          1
+     a₁ + ────────
+               1
+          a₂ + ───
+               ⋱
+```
 
-where $a_0 \in \mathbb{Z}$ and $a_k \in \mathbb{Z}_{>0}$ for $k \geq 1$.
+written compactly as `[a₀; a₁, a₂, …]`, where `a₀` is any integer and
+`a₁, a₂, …` are strictly positive integers.
 When the sequence is finite the expression represents a rational number exactly.
 
 Convergents are the rational approximations obtained by truncating the expansion:
 
-$$
-\frac{p_n}{q_n} = [a_0;\, a_1, \ldots, a_n]
-$$
+```
+pₙ/qₙ  =  [a₀; a₁, …, aₙ]
+```
 
 They satisfy the two-term recurrence
 
-$$
-p_n = a_n p_{n-1} + p_{n-2}, \qquad q_n = a_n q_{n-1} + q_{n-2}
-$$
+```
+pₙ = aₙ·pₙ₋₁ + pₙ₋₂,   qₙ = aₙ·qₙ₋₁ + qₙ₋₂
+```
 
-and are best rational approximations to the value being expanded.
+and are the best rational approximations to the value being expanded.
 
 ---
 
@@ -55,7 +61,7 @@ rather than first-class objects.
 
 `catena` starts from the general, countably infinite definition.  A
 `SimpleContinuedFraction` is driven by a generator callable that produces
-partial quotients on demand — so an infinite expansion like $\sqrt{2}$ or $e$
+partial quotients on demand — so an infinite expansion like `√2` or `e`
 is represented by a small, fixed-size object regardless of how many convergents
 you compute.  Convergents are memoised as they are requested; you pay only for
 what you use, and the cache is shared transparently when the same tail is viewed
@@ -63,7 +69,7 @@ with a different integer part.
 
 `catena` also does not subclass `fractions.Fraction`.  Convergents produced by
 the two-term recurrence are guaranteed to be in lowest terms — consecutive
-convergents satisfy $p_n q_{n-1} - p_{n-1} q_n = \pm 1$, so $\gcd(p_n, q_n) = 1$
+convergents satisfy `pₙ·qₙ₋₁ − pₙ₋₁·qₙ = ±1`, so `gcd(pₙ, qₙ) = 1`
 always holds.  `fractions.Fraction` normalises every result through a GCD
 reduction regardless, which means wrapping convergents in it would pay a cost
 that buys nothing.  Instead, `catena` stores numerator/denominator pairs as
@@ -76,18 +82,18 @@ applications of continued fraction theory.  The following are already
 implemented or partially implemented:
 
 - **Quadratic irrationals and periodic SCFs** — `PeriodicSimpleContinuedFraction`
-  represents numbers of the form $(P + \sqrt{D})/Q$ as eventually-periodic
+  represents numbers of the form `(P + √D) / Q` as eventually-periodic
   expansions.  Provides `quadratic_surd()`, `conjugate()`, `inverse()`,
   `from_quadratic_surd()`, and `__float__` / `as_decimal()`.
 
 Planned for future releases:
 
 - **Best rational approximations** — direct extraction from the convergent sequence.
-- **Pell's equation** — solutions via the periodic expansion of $\sqrt{D}$.
+- **Pell's equation** — solutions via the periodic expansion of `√D`.
 - **Farey sequences and mediants** — enumeration of rationals and their
   geometric interpretation as rational points in the plane.
 - **Transcendental constants** — generalized continued fraction expansions for
-  $e^x$, $\tanh(1/n)$, $\tan(n)$, Bessel functions, and related sequences.
+  `eˣ`, `tanh(1/n)`, `tan(n)`, Bessel functions, and related sequences.
 - **Fibonacci-type sequences** — structural connections between convergents and
   linear recurrences.
 
