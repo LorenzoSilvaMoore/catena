@@ -9,38 +9,66 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+---
+
+## [0.3.0] — 2026-05-07
+
 ### Added
 
-- `SimpleContinuedFraction.__float__`: converts to `float` via `convergent(50)`,
-  sufficient to exhaust 64-bit float precision for all standard generators.
+- `SimpleContinuedFraction.__float__`: evaluates `convergent(50)` as a
+  `float`.  The 50th-convergent denominator exhausts 64-bit float precision
+  for all standard generators (worst case: Fibonacci denominators give error
+  ≈ 1.5 × 10⁻²¹).
 - `SimpleContinuedFraction.segment(n)`: returns a `FiniteSimpleContinuedFraction`
-  of the first *n* partial quotients with an independent cache.
-- `FiniteSimpleContinuedFraction.segment(n)`: truncation override — shares the
-  cache when `n == size`, creates an independent copy when `n < size`, raises
-  `IndexError` when `n > size`.
+  of the first *n* body partial quotients with an independent convergent cache.
+- `FiniteSimpleContinuedFraction.segment(n)` (override): `n < size` → independent
+  copy; `n == size` → cache-sharing `shift(0)` clone; `n > size` → `IndexError`.
+  Inherited automatically by `PeriodicSimpleContinuedFraction`.
+- `catena.cache` re-exported from `catena/__init__.py` so `OrdinalCache`,
+  `CacheHandler`, `SetLightCache`, and `SetCache` are accessible directly as
+  `catena.cache.<Class>` without importing from the internal submodule.
+
+### Fixed
+
+- `SimpleContinuedFraction.inverse()`: negative integer part (`a_0 < 0`) now
+  raises `ValueError` explicitly instead of silently constructing a malformed
+  SCF with a negative value in a body slot (which violates `g: I → ℤ⁺`).
+  The condition was tightened from a bare `else` to `elif a_0 > 0` with an
+  explicit guard.
 
 ### Changed
 
-- **`tail_convergent` recurrence indexation** shifted to match standard
-  literature: seeds are now `(h_{-2}, k_{-2}) = (1, 0)` and
-  `(h_{-1}, k_{-1}) = (0, 1)`, so `h_0 = 1`, `k_0 = a_1`.
+- **`tail_convergent` recurrence seeds** shifted to match standard literature:
+  `(h_{-2}, k_{-2}) = (1, 0)`, `(h_{-1}, k_{-1}) = (0, 1)`,
+  giving `h_0 = 1`, `k_0 = a_1`.
 - **`tail_convergent` implementation** rewritten from top-down recursion to an
-  iterative forward fill, advancing from `OrdinalCache.largest_key` to *n*.
-  Stack depth is now O(1) regardless of *n*; `RecursionError` on large indices
-  is no longer possible.
+  iterative forward fill that advances from `OrdinalCache.largest_key` to *n*.
+  Stack depth is now O(1) for any *n*; `RecursionError` on large indices is no
+  longer possible.  The frontier is clamped to `max(0, largest_key + 1)` to
+  guard against stale seed entries corrupting the fill.
 
 ### Documentation
 
 - **Theory paper v1.0.0** (`docs/theory/`) — first complete draft covering all
-  implemented classes.  Sections added or substantially rewritten: infinite SCFs
-  (generator model, inverse, integer translation, caching remarks), finite SCFs
-  (dual-representation, canonical form, IEEE 754 and `to_decimal`), caching
-  (full rewrite: primitives, decorators, generator-level decision guide),
-  periodic SCFs (new section: two-generator data model, purely-periodic
-  unification, deferred algebraic methods), notation (3-column table with
-  `catena` attribute column), introduction (ℕ/ℤ⁺ remark, stale bullets removed).
-- GitHub Actions workflow compiles `main.tex` with `latexmk` and deploys
-  `catena-theory.pdf` to GitHub Pages on every push to `docs/theory/`.
+  implemented classes.  Sections added or substantially rewritten:
+  - *Simple SCFs*: generator catenadef rewritten; `inverse` proposition fixed
+    (`a_0 > 0` condition); integer-translation, shared-cache, and
+    no-`to_decimal` remarks added.
+  - *Finite SCFs*: dual-representation proposition, canonical-form remark,
+    IEEE 754 remark, `to_decimal` catenadef, full properties subsection.
+  - *Caching*: complete rewrite — cache primitives, memoisation decorators,
+    generator-level caching decision guide, shared-cache and tail section.
+  - *Periodic SCFs*: new section — two-generator data model, purely-periodic
+    vs. eventually-periodic unification (single class, vacuous `g_pre`),
+    inherited and deferred-algebraic methods subsection.
+  - *Notation*: overhauled to a 3-column table (Symbol / `catena` attribute /
+    Meaning) with `body` vs. `generator` disambiguation remark.
+  - *Introduction*: ℕ/ℤ⁺ remark, `PeriodicSCF` deferral remark,
+    `fractions.Fraction` worst-case clarification, stale function-notation
+    bullets removed.
+- GitHub Actions workflow (`.github/workflows/build-docs.yml`) compiles
+  `main.tex` with `latexmk` + `biber` and deploys `catena-theory.pdf` to
+  GitHub Pages on every push touching `docs/theory/`.
 - README links to the hosted PDF.
 
 ---
