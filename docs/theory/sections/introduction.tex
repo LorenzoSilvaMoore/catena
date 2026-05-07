@@ -21,9 +21,11 @@ A float is not a rational number; it is the nearest representable binary fractio
 and the gap between the two is invisible unless you care to look for it.
 
 \texttt{fractions.Fraction} is exact and supports arbitrary precision, but it
-accumulates large numerators and denominators quickly: adding two fractions of
-$n$-digit denominators can produce a $2n$-digit denominator, and every operation
-pays a GCD reduction to keep the result in lowest terms.
+accumulates large numerators and denominators quickly.  Adding two fractions
+$p_1/q_1 + p_2/q_2$ yields $(p_1 q_2 + p_2 q_1)/(q_1 q_2)$; in the worst case
+(coprime denominators) the denominator grows from $n$ digits to $2n$ digits before
+any reduction, and every operation incurs a GCD computation whose cost grows with
+digit count.
 
 Continued fractions offer a different kind of exactness.  The partial quotients
 $[a_0;\, a_1, a_2, \ldots]$ are small integers — typically single digits for
@@ -62,6 +64,14 @@ deriving convergents and numeric approximations from it on demand.
         inverse, negation, and exact decimal evaluation.
 \end{itemize}
 
+\begin{remark}
+  \texttt{PeriodicSimpleContinuedFraction} is listed here for completeness.
+  Its full mathematical treatment — Lagrange's theorem on quadratic irrationals,
+  the Pell equation, and the algebraic operations
+  (\texttt{conjugate}, \texttt{inverse}, \texttt{quadratic\_coefficients}) —
+  is deferred to a forthcoming section.
+\end{remark}
+
 The mathematical content of this document is therefore structured around these
 three cases.  It is not intended to be an exhaustive treatment of continued fraction
 theory; for that, see \cite{khinchin1964} and \cite{rockett1992}.  The goal is to
@@ -72,7 +82,7 @@ give enough background to justify the algorithms and design choices in the libra
 Throughout this document:
 \begin{itemize}[nosep]
       \item $\N$ denotes the natural numbers (including zero).
-      \item For any $n \in \N$, we implicitly assume the set theorey construction $n = \{0, 1, \ldots, n-1\}$.
+      \item For any $n \in \N$, we implicitly assume the set-theoretic construction $n = \{0, 1, \ldots, n-1\}$.
       \item $\Z$, $\Q$, $\R$ denote the integers, rationals, and reals respectively.
       \item Likewise, $\Zp$, $\Qp$, $\Rp$ denote the positive (non-zero) integers, rationals, and reals respectively.
       \item $[a_0;\, a_1, a_2, \ldots, a_n]$ denotes a finite SCF with $a_0 \in \Z$ and
@@ -80,8 +90,11 @@ Throughout this document:
       \item $c_k = (p_k, q_k)$ denotes the $k$-th convergent numerator--denominator pair, with
             $q_k \in \Zp$ by convention.
       \item The function $\{\cdot\}: \R \to \R$ denotes the fractional part, so $\{x\} = x - \lfloor x \rfloor$.
-      \item For a function $f: A \to B$, we write $f(a) = b$ to mean $f$ maps $a$ to $b$.
-      \item For a function $f: A \to B$ and a subset $S \subseteq A$, we write $f(S) = \{f(s) : s \in S\}$ to mean the image of $S$ under $f$.
-      \item For a function $f: A \to B$ and a subset $T \subseteq B$, we write $f^{-1}(T) = \{a \in A : f(a) \in T\}$ to mean the preimage of $T$ under $f$.
-      \item For a function $f: A \to B$ and a subset $S \subseteq A$, we write $f|_S: S \to B$ to mean the restriction of $f$ to $S$, defined by $f|_S(s) = f(s)$ for all $s \in S$.
 \end{itemize}
+
+\begin{remark}
+  We follow the set-theoretic convention $\N = \{0, 1, 2, \ldots\}$ including zero.
+  The positive integers $\Zp = \{1, 2, 3, \ldots\}$ exclude zero.
+  In particular, all body partial quotients $a_k$ (for $k \geq 1$) lie in $\Zp$,
+  while the integer part $a_0 \in \Z$ may be zero or negative.
+\end{remark}

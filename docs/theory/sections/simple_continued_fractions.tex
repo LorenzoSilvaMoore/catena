@@ -7,7 +7,7 @@ For a more comprehensive treatment, see \cite{khinchin1964} and \cite{rockett199
 
 In the most general sense, a continued fraction is an expression of the form
 \[
-  a_0 + \cfrac{b_1}{a_1 + \cfrac{b_2}{a_2 + \cfrac{b_3}{\ddots + \cfrac{b_n}{a_n} + \ldots}}}
+  a_0 + \cfrac{b_1}{a_1 + \cfrac{b_2}{a_2 + \cfrac{b_3}{\ddots}}}
 \]
 where $a_0, a_1, \ldots, a_n$ and $b_1, b_2, \ldots, b_n$, depending on the context, 
 may be assumed to be integers, rational numbers, either real numbers or complex numbers,
@@ -23,7 +23,7 @@ where $b_n = 1$ for all $n$ and $a_n$ are integers with $a_1, a_2, \ldots, a_n, 
     irrational number is infinite.
 } Namely, we are left with expressions of the form
 \[
-  a_0 + \cfrac{1}{a_1 + \cfrac{1}{a_2 + \cfrac{1}{\ddots + \cfrac{1}{a_n} +\cdots}}}
+  a_0 + \cfrac{1}{a_1 + \cfrac{1}{a_2 + \cfrac{1}{\ddots}}}
 \]
 with $a_0 \in \Z$ and $a_1, a_2, \ldots, a_n, \ldots \in \Zp$. For brevity, it is common to write this 
 expression as $[a_0;\, a_1, a_2, \ldots, a_n, \ldots]$. The $a_n$ are called the \textit{partial quotients} 
@@ -45,7 +45,7 @@ implementations developed in the following sections.
 \subsection{Core concepts and implementations}
 
 \begin{definition}[Generating Function]
-  Let $I \in \N \cup \{N\}$. A \textit{generator} indexed by $I$ is any function 
+  Let $I \in \N \cup \{\N\}$. A \textit{generator} indexed by $I$ is any function 
   $g: I \to \Zp$. 
   
   When $I = \N$, we say that $g$ is an \textit{infinite generator}, and when 
@@ -61,26 +61,32 @@ implementations developed in the following sections.
 \begin{lstlisting}[style=python]
 from catena.generators import Generator, CachedGenerator, FiniteGenerator
 
-# Infinite generator: a_n = 2 for all n > 0, with integer part a_0 = 1 (\sqrt{2} = [1; 2, 2, 2, ...])
+# Infinite generator: every partial quotient equals 2 (body of sqrt(2) = [1; 2, 2, 2, ...])
 gen = Generator(lambda n: 2)
 
-# CachedGenerator is useful when f(n) is expensive to evaluate.
-# Here, naive recursive Fibonacci is O(2^n) per call without memoisation;
-# wrapping it in CachedGenerator ensures each index is computed at most once
-# across all calls.
-def fib(n):
-    return fib(n - 1) + fib(n - 2) if n > 1 else n + 1
+# CachedGenerator is appropriate when g(n) is expensive and will be queried
+# repeatedly, or when the same generator is shared across several SCF
+# instances.  It memoises each top-level call in an OrdinalCache and exposes
+# catena's cache introspection layer (call_count, read_count, reset_cache).
+# Example: g(n) = number of divisors of (n+2) that do not exceed sqrt(n+2)
+import math
+def small_divisors(n):
+    m = n + 2
+    return sum(1 for d in range(1, int(math.isqrt(m)) + 1) if m % d == 0)
 
-cgen = CachedGenerator(fib)   # fib(n) is called once per n, then cached
-cgen(10) # computes fib(10) and caches results for fib(0) through fib(10)
-cgen(15) # computes fib(11) through fib(15), reusing cached results as needed
+cgen = CachedGenerator(small_divisors)
+cgen(100)          # computes small_divisors(100), stores result
+cgen(100)          # O(1) cache hit
+cgen.call_count    # 1  (one miss)
+cgen.read_count    # 1  (one hit)
+# See the Caching section for the full cache infrastructure.
 
-# Finite generator: fixed sequence [7, 15, 1, 292, ...]  (pi = [3; 7, 15, 1, 292, ...])
-fgen = FiniteGenerator([7, 15, 1, 292, 1, 1, 1, 2]) # the well-known SCF expansion of \pi begins thus
-fgen(0) # 7
-fgen(3) # 292
-fgen(10) # raises IndexError
-
+# Finite generator: body partial quotients of pi = [3; 7, 15, 1, 292, ...]
+# The integer part 3 is stored separately in the SCF, not in the generator.
+fgen = FiniteGenerator([7, 15, 1, 292, 1, 1, 1, 2])  # a_1 ... a_8
+fgen(0)   # 7   (a_1)
+fgen(3)   # 292 (a_4)
+fgen(10)  # raises IndexError (only indices 0--7 are defined)
 \end{lstlisting}
 \end{catenadef}
 
@@ -88,7 +94,7 @@ fgen(10) # raises IndexError
 \begin{definition}[Simple Continued Fraction]
   A \textit{simple continued fraction} is an expression of the form
   \[
-    x = a_0 + \cfrac{1}{a_1 + \cfrac{1}{a_2 + \cfrac{1}{\ddots + \cfrac{1}{a_n} + \cdots}}}
+    x = a_0 + \cfrac{1}{a_1 + \cfrac{1}{a_2 + \cfrac{1}{\ddots}}}
   \]
   where $a_0$ is an integer and $a_1, a_2, \ldots, a_n, \ldots$ are positive integers. Thus,
   given $a_0 \in \Z$ and a generator $g: I \to \Zp$, such that $g(n) = a_{n+1}$, we represent the SCF as
@@ -115,8 +121,15 @@ scf.generator    # FiniteGenerator([7, 16])
     $n$ partial quotients from $g$. 
     
     Formally, for $n \in I$, the segment of $x$ at index $n$ is
-    given by $x_n = (a_0, g_n)$, where $g_n:=g|_n$ is the restriction of $g$ to $n$.
+    given by $x_n = (a_0, g_n)$, where $g_n := g|_n$ is the restriction of $g$ to $n$,
+    i.e.\ the function with domain $\{0, 1, \ldots, n-1\}$ satisfying $g_n(k) = g(k)$.
 \end{definition}
+
+\begin{remark}
+  In particular, $x_0 = (a_0, \varnothing)$ is the degenerate finite SCF with no body
+  partial quotients, representing the integer $a_0$ itself.
+  For $n \geq 1$, $x_n = [a_0;\, g(0), g(1), \ldots, g(n-1)]$.
+\end{remark}
 
 \begin{catenadef}[\texttt{SimpleContinuedFraction.segment}]
 \begin{lstlisting}[style=python]
@@ -136,8 +149,11 @@ phi.segment(10) # [1; 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
     require access to partial quotients that do not exist in the finite generator. Therefore, 
     in the finite case, calling \texttt{segment(n)} with $n > \text{size}$ will raise an \texttt{IndexError}.
 
-    As for \texttt{segment(size)}, \texttt{self.shift(0)} is returned since the segment at index \texttt{size} 
-    corresponds to the original SCF itself, as to avoid unnecessary copying.
+    As for \texttt{segment(size)}, \texttt{self.shift(0)} is returned since the segment at
+    index \texttt{size} corresponds to the original SCF itself.  \texttt{shift(0)} creates a
+    new \texttt{FiniteSimpleContinuedFraction} that shares the same \texttt{FiniteGenerator}
+    and convergent cache as \texttt{self}, but with \texttt{integer\_part} unchanged (shifting
+    by zero).  This avoids a deep copy while preserving the immutability contract.
 \end{remark}
 
 \begin{definition}[Remainder]
@@ -146,10 +162,9 @@ phi.segment(10) # [1; 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
     \[
         r_n(x) = (g(n), h),
     \]
-    where $h: |I \setminus (n+1)| \to \Zp$ is defined by
-    \[
-        h(m) = g(m + (n+1)).
-    \]
+    where $h: J \to \Zp$, with $J$ the ordinal $|I \setminus \{0,1,\ldots,n\}|$, is
+    defined by $h(m) = g(m + n + 1)$.  Concretely, $J$ is identified with
+    $I \setminus \{0, 1, \ldots, n\}$ via the shift $m \mapsto m + n + 1$.
 \end{definition}
 
 \begin{remark}
@@ -267,6 +282,16 @@ phi.tail().convergent(7) # 21/34
 \end{lstlisting}
 \end{catenadef}
 
+\begin{remark}[Shared \texttt{tail\_convergent} Callable]
+  \texttt{tail()} uses \texttt{\_from\_shared}, which copies the reference
+  to \texttt{\_cache\_handler} \emph{and} to the \texttt{SetLightCache}-wrapped
+  \texttt{tail\_convergent} callable.  Since the cache lives in
+  \texttt{cache\_handler}, both objects read from and write to the
+  same \texttt{OrdinalCache} instance, giving true shared memoisation.
+  This is why \texttt{tail.tail\_convergent(1)} above retrieves a cached
+  value rather than recomputing it.
+\end{remark}
+
 In the literature, tail convergents are typically not introduced explicitly, 
 as they are not of primary theoretical interest. However, they provide a useful 
 computational tool. In particular, they allow distinct SCFs to share both the 
@@ -285,9 +310,16 @@ While minor, this distinction is worth keeping in mind when comparing results
 with the classical literature.
 
 \begin{remark}[RecursionError for Negative Indices]
-    The recurrence relations for tail convergents are only defined for $n \geq 0$, and the seed values are defined for $n = -1$ and $n = -2$. 
-    Therefore, if the recurrence is called with $n < -2$, it indicates a logic error in the implementation, as it would require access to 
-    tail convergents that are not defined. In such cases, a \texttt{RecursionError} should be raised to signal that a negative value has been reached at runtime.
+    The recurrence relations for tail convergents are only defined for $n \geq 0$, and the seed values are defined for $n = -1$ and $n = -2$.
+    Therefore, if the recurrence is called with $n < -2$, it indicates a logic error in the implementation, as it would require access to
+    tail convergents that are not defined.
+
+    In \catena, this condition raises a \texttt{RecursionError}.  Python's \texttt{RecursionError} is
+    conventionally associated with call-stack exhaustion, but here it is repurposed to signal that
+    the recurrence has descended below its valid base cases — a situation that can only arise from
+    a logic error upstream, not from a bad user-supplied argument.  An alternative design would use
+    \texttt{ValueError}; the current choice is a deliberate signal that the error is structural
+    (a malformed recursive call) rather than an invalid input.
 \end{remark}
 
 \subsubsection{Some useful properties of convergents}
@@ -301,6 +333,7 @@ with the classical literature.
 \end{theorem}
 
 \begin{corollary}[Coprimality of Convergents]
+    \label{coro:coprimality}
     Let $x = (a_0, g)$ be a simple continued fraction, where $g: I \to \Zp$. 
     For $n \in I$, let $\frac{p_n}{q_n}$ be the $n$-th convergent of $x$. Then $p_n$ and $q_n$ are 
     coprime for all $n \in I$; that is,
@@ -404,6 +437,28 @@ float(phi) # approximately 1.618033988749895
 \end{lstlisting}
 \end{catenadef}
 
+\begin{remark}[No \texttt{to\_decimal} for Infinite SCFs]
+  The finite SCF class provides a \texttt{to\_decimal} method that returns an
+  exact arbitrary-precision \texttt{Decimal} value (see
+  \S\ref{sec:finite_scf}).  No analogous method is defined on
+  \texttt{SimpleContinuedFraction}.
+
+  The reason is that \texttt{to\_decimal} requires choosing \emph{which}
+  convergent to evaluate, and for a finite SCF there is a canonical choice:
+  the terminal convergent, which is the exact rational value.
+  For an infinite SCF no such canonical convergent exists — the sequence of
+  convergents converges to $x$, but every individual convergent is only an
+  approximation.  Any fixed index $n$ would give an answer whose precision
+  depends on $n$ and on the specific SCF, with no guarantee of meeting
+  a caller-supplied precision target.
+
+  By contrast, \texttt{\_\_float\_\_} commits to IEEE\,754 double precision
+  ($\approx 2^{-52}$), which is fixed by the hardware; convergent\,(50) is
+  always sufficient (see the remark above).  For truly arbitrary-precision
+  output the caller should use \texttt{segment($n$).to\_decimal()} for a
+  chosen $n$, making the precision trade-off explicit.
+\end{remark}
+
 \begin{theorem}[Evaluation from Remainder\footnote{See \cite{khinchin1964}, Theorem 5, p. 7 \& Theorem 7, p. 8.}]
     Let $x = (a_0, g)$ be a simple continued fraction, where $g: I \to \Zp$. 
     For $n \in I$, let $\frac{p_n}{q_n}$ be the $n$-th convergent of $x$, and let $r_n$ be the $n$-th
@@ -412,3 +467,75 @@ float(phi) # approximately 1.618033988749895
         x = \frac{p_{n-1}r_n + p_{n-2}}{q_{n-1}r_n + q_{n-2}} \qquad (n \in I).
     \]
 \end{theorem}
+
+\begin{remark}
+  In this theorem $r_n$ denotes the \emph{value} of the $n$-th remainder SCF
+  $r_n(x) = (g(n),\, h)$ as a real number, not the SCF object itself.
+  The identity then follows from the matrix formulation of the recurrence
+  (see, e.g., \cite{khinchin1964}, Theorem 5).
+\end{remark}
+
+\begin{proposition}[SCF of the Multiplicative Inverse]
+  Let $x = (a_0, g)$ be an SCF with $x > 0$.
+  \begin{enumerate}
+    \item If $a_0 = 0$: $x = [0;\, a_1, a_2, \ldots]$ with $a_1 \geq 1$, so
+          $1/x = [a_1;\, a_2, a_3, \ldots]$.
+    \item If $a_0 > 0$: $x = [a_0;\, a_1, a_2, \ldots]$ with $a_0 \in \Zp$, so
+          $1/x = [0;\, a_0, a_1, a_2, \ldots]$.
+  \end{enumerate}
+  In both cases the partial quotients of $1/x$ lie in $\Zp$: in case~1, the
+  new integer part is $a_1 \geq 1$ and the body continues with positive values;
+  in case~2, the body begins with $a_0 \geq 1$.
+
+  The condition $x > 0$ (equivalently $a_0 \geq 0$) is necessary.  If
+  $a_0 < 0$ then $x < 0$, so $1/x < 0$ and its SCF has a negative integer
+  part; this cannot be recovered by the simple generator-prepend trick above,
+  which would place a negative value in a body slot (violating $g: I \to \Zp$).
+  The result is computed by \texttt{SimpleContinuedFraction.inverse}, which
+  stores it in a write-once \texttt{\_inverse} attribute and sets the
+  inverse's own \texttt{\_inverse} back to \texttt{self}, making
+  \texttt{inverse} an involution on cached pairs.
+\end{proposition}
+
+\begin{catenadef}[\texttt{SimpleContinuedFraction.inverse}]
+\begin{lstlisting}[style=python]
+phi = SimpleContinuedFraction(lambda n: 1, integer_part=1)
+# phi = [1; 1, 1, 1, ...] (golden ratio, a_0 = 1 > 0)
+inv_phi = phi.inverse()   # 1/phi = phi - 1 = [0; 1, 1, 1, ...]
+inv_phi.integer_part      # 0
+inv_phi.inverse() is phi  # True  (involution: write-once _inverse points back to self)
+
+# a_0 = 0 case:
+tail_phi = phi.tail()          # [0; 1, 1, 1, ...]
+tail_phi.inverse().integer_part  # 1  (= a_1; inverse is phi itself)
+
+# a_0 < 0: not supported
+neg = SimpleContinuedFraction(lambda n: 1, integer_part=-1)
+neg.inverse()  # raises ValueError
+\end{lstlisting}
+\end{catenadef}
+
+\begin{proposition}[Integer Translation]
+  Let $x = (a_0, g)$ be an SCF and $n \in \Z$.  Then
+  \[
+    x + n = (a_0 + n,\, g).
+  \]
+  That is, adding an integer to an SCF shifts only the integer part,
+  leaving the generator unchanged.  In \catena, this is implemented via
+  \texttt{shift($n$)}, which creates a new instance sharing the same
+  generator and convergent cache.  Both \texttt{scf + n} and
+  \texttt{n + scf} are supported; non-integer arguments return
+  \texttt{NotImplemented}.
+\end{proposition}
+
+\begin{catenadef}[\texttt{SimpleContinuedFraction.\_\_add\_\_}]
+\begin{lstlisting}[style=python]
+phi = SimpleContinuedFraction(lambda n: 1, integer_part=1)
+# phi = [1; 1, 1, 1, ...] (golden ratio)
+shifted = phi + 3       # [4; 1, 1, 1, ...]
+shifted.integer_part    # 4
+3 + phi                 # also [4; 1, 1, 1, ...] (__radd__ is symmetric)
+# Only integer arguments are accepted:
+# phi + 1.5             # returns NotImplemented
+\end{lstlisting}
+\end{catenadef}

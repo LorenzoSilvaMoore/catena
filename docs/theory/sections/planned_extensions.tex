@@ -1,0 +1,36 @@
+
+
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Planned Extensions}
+% ─────────────────────────────────────────────────────────────────────────────
+
+The following are flagged as future development areas; they are not yet implemented in the library, 
+but they are on the roadmap. That said, no promises are made about the timeline for any of 
+these features, and they may be subject to change as the project evolves.
+Each will warrant its own section in this document.
+
+\subsection{Arithmetic on Continued Fractions}
+
+Gosper (1972) showed how to perform the four arithmetic operations on SCFs
+in a streaming fashion using $2 \times 2$ and $2 \times 2 \times 2$ integer matrices,
+without fully evaluating either operand.
+This is the natural future direction for \texttt{FiniteSimpleContinuedFraction} arithmetic. See \cite{gosper1972}
+
+\subsection{Generalised Continued Fractions}
+
+The general form $b_0 + K_{n=1}^{\infty} a_n / b_n$ with arbitrary integer or
+function sequences.
+Applications: rapid evaluation of $\pi$, $e$, $\ln 2$, Bessel functions, etc.
+
+\subsection{Metric Theory and Gauss Map}
+
+The map $T: x \mapsto \{1/x\}$ (fractional part of $1/x$) on $(0,1)$ is the
+\emph{Gauss map}; its invariant measure $\mu(A) = \frac{1}{\ln 2}\int_A \frac{dx}{1+x}$
+governs the distribution of partial quotients (Gauss--Kuzmin statistics).
+This will be relevant for statistical analysis routines.
+
+\subsection{Multidimensional Generalisations}
+
+Jacobi--Perron and related algorithms for simultaneous approximation; connection to
+lattice reduction (LLL algorithm).

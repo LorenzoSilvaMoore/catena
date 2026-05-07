@@ -98,7 +98,7 @@
 % ── Metadata ──────────────────────────────────────────────────────────────────
 \title{\textbf{catena} \\[0.5em]
        \large Architecture, Algorithm Decisions, and Formal Theory \\[0.5em]
-       \large \textit{v0.1, Draft}}
+       \large \textit{v1.0.0-alpha}}
 \author{Lorenzo Silva Moore\footnote{Facultad de Ciencias (Faculty of Sciences), UNAM, México.\\\indent\indent \texttt{lorenzosilvamoore@ciencias.unam.mx} $\odot$ \texttt{lorenzo.smb.rayo@gmail.com}}}
 \date{\today}
 
@@ -116,71 +116,13 @@
 
 \include{sections/finite_simple_continued_fractions}
 
-\include{sections/convergents}
+% \include{sections/convergents}
 
 \include{sections/caching}
 
+\include{sections/periodic_simple_continued_fractions}
 
-
-% ─────────────────────────────────────────────────────────────────────────────
-\section{The Greedy (Sylvester) Algorithm}
-% ─────────────────────────────────────────────────────────────────────────────
-
-\texttt{Method.greedy\_algorithm} decomposes a fraction $p/q$ into an
-\emph{Egyptian fraction} — a sum of distinct unit fractions — using the greedy rule
-\[
-  \frac{p}{q} = \frac{1}{\lceil q/p \rceil} + \frac{p\lceil q/p \rceil - q}{q\lceil q/p \rceil}.
-\]
-This is distinct from the SCF expansion; it is sometimes called the Sylvester sequence.
-The intermediate use of \texttt{Method.simplify} at each step ensures the process terminates.
-
-\begin{remark}[Relevance to SCF]
-  The greedy algorithm appears in \texttt{catena} via \texttt{Convert.from\_float\_to\_armonic}
-  and \texttt{Convert.from\_str\_to\_armonic}, providing an alternative representation of a
-  rational that may be compared to the SCF expansion.
-  Their relationship to the Stern--Brocot tree and the Calkin--Wilf tree is a topic for a
-  future section.
-\end{remark}
-
-% ─────────────────────────────────────────────────────────────────────────────
-\section{Planned Extensions}
-% ─────────────────────────────────────────────────────────────────────────────
-
-The following are flagged as future development areas.
-Each will warrant its own section in this document.
-
-\subsection{Periodic Continued Fractions (Quadratic Irrationals)}
-
-By Lagrange's theorem, $\alpha \in \R$ has a periodic SCF if and only if
-$\alpha$ is a quadratic irrational.
-Planned class: \texttt{PeriodicSimpleContinuedFraction}.
-
-\subsection{Arithmetic on Continued Fractions}
-
-Gosper (1972) showed how to perform the four arithmetic operations on SCFs
-in a streaming fashion using $2 \times 2$ and $2 \times 2 \times 2$ integer matrices,
-without fully evaluating either operand.
-This is the natural future direction for \texttt{FinateSimpleContinuedFraction} arithmetic.
-
-\cite{gosper1972} % placeholder until refs.bib is populated
-
-\subsection{Generalised Continued Fractions}
-
-The general form $b_0 + K_{n=1}^{\infty} a_n / b_n$ with arbitrary integer or
-function sequences.
-Applications: rapid evaluation of $\pi$, $e$, $\ln 2$, Bessel functions, etc.
-
-\subsection{Metric Theory and Gauss Map}
-
-The map $T: x \mapsto \{1/x\}$ (fractional part of $1/x$) on $(0,1)$ is the
-\emph{Gauss map}; its invariant measure $\mu(A) = \frac{1}{\ln 2}\int_A \frac{dx}{1+x}$
-governs the distribution of partial quotients (Gauss--Kuzmin statistics).
-This will be relevant for statistical analysis routines.
-
-\subsection{Multidimensional Generalisations}
-
-Jacobi--Perron and related algorithms for simultaneous approximation; connection to
-lattice reduction (LLL algorithm).
+\include{sections/planned_extensions}
 
 \include{sections/notation}
 

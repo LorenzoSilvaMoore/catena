@@ -9,6 +9,9 @@ two-layer convergent engine and a common arithmetic interface.
 
 The library has **zero dependencies** and requires Python ≥ 3.12.
 
+A formal write-up of the theory and implementation decisions is available as a PDF:
+**[catena — Architecture, Algorithm Decisions, and Formal Theory](https://lorenzosilvamoore.github.io/catena/catena-theory.pdf)**
+
 ---
 
 ## Mathematical background
