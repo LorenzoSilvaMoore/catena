@@ -12,7 +12,6 @@ permissions:
   pages: write
   id-token: write
 
-# Allow only one concurrent deployment
 concurrency:
   group: pages
   cancel-in-progress: true
@@ -24,20 +23,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install TeX Live
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y --no-install-recommends \
-            texlive-latex-extra \
-            texlive-science \
-            texlive-fonts-recommended \
-            texlive-bibtex-extra \
-            biber \
-            latexmk
-
       - name: Compile PDF
-        working-directory: docs/theory
-        run: latexmk -pdf -interaction=nonstopmode main.tex
+        uses: xu-cheng/latex-action@v3
+        with:
+          working_directory: docs/theory
+          root_file: main.tex
+          latexmk_use_lualatex: false
+          latexmk_shell_escape: false
 
       - name: Stage output
         run: |
