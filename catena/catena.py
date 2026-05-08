@@ -33,6 +33,8 @@ The standard two-term recurrence is split into two layers:
   incorporating the integer part ``a₀``.
 """
 
+from fractions import Fraction
+
 from .cache import OrdinalCache, CacheHandler, SetLightCache
 
 from typing import Callable, Tuple, Optional, override
@@ -471,6 +473,30 @@ class SimpleContinuedFraction:
         p, q = self.convergent(50)
         return p / q
     
+    def __neg__(self):
+        """
+        Returns the additive inverse of the SCF, i.e., a new SCF representing -x if self represents x.
+        """
+        n = - (self.integer_part + 1)
+        a0 = self.generator(0)
+        if a0 > 1:
+            # If a₁ > 1, we need the fractional part to be [0; 1, a₁-1, a₂, a₃, …] to ensure the correct value after negation.
+            new_generator = (
+                self.generator
+                .advance(1) # Skip a₁ to get to a₂
+                .prepend(FiniteGenerator([1, a0 - 1])) # Prepend 1 and a₁ - 1 to the front of the tail
+                )
+            
+        else:
+            # If a₁ = 1, we need the fractional part to be [0; a₂ + 1, a₃, …] to ensure the correct value after negation.
+            new_generator = (
+                self.generator
+                .advance(2) # Skip a₁ and a₂ (which is 1) to get to a₃
+                .prepend(FiniteGenerator([self.generator(1) + 1])) # Prepend a₂ + 1 to the front of the tail
+                )
+        
+        return type(self)(new_generator, integer_part=n)
+    
     def tail_convergent(self, n: int) -> Tuple[int, int]:
         """
         Computes the *n*-th convergent of the tail ``[a₁; a₂, …, aₙ₊₁]``.
@@ -744,6 +770,12 @@ class FiniteSimpleContinuedFraction(SimpleContinuedFraction):
     def __bool__(self):
         """Returns ``False`` only when ``integer_part == 0`` and the tail is empty."""
         return self.integer_part != 0 or len(self) != 0
+
+    def __neg__(self):
+        if self.size <= 2: # For general negation, we ned a1 and a2 to be accessible, so here we do it by hand.
+            return FiniteSimpleContinuedFraction.from_rational(-Fraction(*self.terminal_convergent))
+        
+        return super().__neg__()  # Use the general negation logic from SimpleContinuedFraction for larger SCFs
     
     @classmethod
     def from_rational(cls, r: mathlib.convert.Rational) -> 'FiniteSimpleContinuedFraction':
@@ -896,8 +928,12 @@ class PeriodicSimpleContinuedFraction(SimpleContinuedFraction):
 
         if len(dtypes) != 2:
             raise ValueError(f"Expected a tuple of two typecodes for 'dtypes' but got {dtypes}")
-        
-        generator = PeriodicGenerator(period=period, pre_period=pre_period, dtypes=dtypes)
+
+        if isinstance(period, PeriodicGenerator):
+            generator = period
+        else:
+            generator = PeriodicGenerator(period=period, pre_period=pre_period, dtypes=dtypes)
+
         super().__init__(generator=generator, integer_part=integer_part)
 
     def __setattr__(self, name, value):
@@ -931,8 +967,9 @@ class PeriodicSimpleContinuedFraction(SimpleContinuedFraction):
         P, Q, D = self.quadratic_surd()
         return (P + D**0.5)/Q
     
+    @override
     def __neg__(self):
-        """Returns the negation of the SCF, i.e. ``-scf``."""
+        """Returns the additive inverse of the SCF, i.e., a new SCF representing -x if self represents x."""
         # The special case of periodic SCFs allows to define a negation operation trivially.
         # If the value of the SCF is (P + √D)/Q, then its negation is (-P - √D)/Q,
         # or what is the same, (P + √D)/(-Q).

@@ -198,8 +198,6 @@ def from_quadratic_surd_to_scf(P: int, Q: int, D: int):
     
     P, Q, D = normalize_quadratic_surd(P, Q, D)
 
-    print(f"Normalized surd: ({P} + √{D}) / {Q}")
-
     if (s:=isqrt(D))**2 == D:
         raise ValueError("D must not be a perfect square")
     

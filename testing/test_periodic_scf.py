@@ -928,3 +928,36 @@ def test_neg_is_pscf_instance():
     pscf = PeriodicSimpleContinuedFraction(period=[2], integer_part=1)
     assert isinstance(-pscf, PeriodicSimpleContinuedFraction)
 
+
+def test_neg_with_preperiod():
+    # [0; 1, (2)] = 1/√2 ≈ 0.7071 → -1/√2 ≈ -0.7071
+    from math import sqrt, isclose
+    pscf = PeriodicSimpleContinuedFraction(period=[2], pre_period=[1], integer_part=0)
+    assert isclose(float(-pscf), -1 / sqrt(2), rel_tol=1e-12)
+
+
+# ===========================================================================
+# Constructor accepting a PeriodicGenerator directly
+# ===========================================================================
+
+def test_constructor_accepts_periodic_generator():
+    pg = PeriodicGenerator(period=[2], pre_period=())
+    pscf = PeriodicSimpleContinuedFraction(period=pg, integer_part=1)
+    assert pscf.integer_part == 1
+    assert pscf.period == (2,)
+    assert pscf.non_repeating_part == ()
+
+
+def test_constructor_periodic_generator_identity():
+    # The generator stored is exactly the one passed in
+    pg = PeriodicGenerator(period=[1, 2], pre_period=[3])
+    pscf = PeriodicSimpleContinuedFraction(period=pg, integer_part=0)
+    assert pscf.generator is pg
+
+
+def test_constructor_periodic_generator_values():
+    from math import sqrt, isclose
+    pg = PeriodicGenerator(period=[2], pre_period=())
+    pscf = PeriodicSimpleContinuedFraction(period=pg, integer_part=1)
+    assert isclose(float(pscf), sqrt(2), rel_tol=1e-12)
+

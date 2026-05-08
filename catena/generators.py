@@ -26,7 +26,7 @@ from collections.abc import Callable, Collection, Sequence
 from array import array
 
 from math import gcd
-from typing import Optional, Tuple
+from typing import Optional, Tuple, override
 
 from .cache import Cache, CacheHandler, SetLightCache, OrdinalCache
 from .strings import safe_int_str
@@ -61,9 +61,83 @@ class Generator(Callable):
         if not callable(generator):
             raise TypeError(f"Generator requires a callable, got {type(generator).__name__}.")
 
-        self.cached = False
         self.generator = generator
 
+    def advance(self, n: int) -> 'Generator':
+        """
+        Advances the generator by *n* steps, returning a new generator that
+        produces the same sequence starting from the *n*-th term.
+
+        Args:
+            n (int): Non-negative number of steps to advance.
+        Returns:
+            Generator: A new generator that produces the same sequence starting from the *n*-th term.
+        Raises:
+            ValueError: If ``n`` is negative.
+        """
+
+        if n < 0:
+            raise ValueError(f"Input n must be non-negative, got {n}.")
+        elif n == 0:
+            return self
+        else:
+            def _advanced_generator(k: int) -> int:
+                return self(n + k)
+            
+            return type(self)(_advanced_generator)
+        
+    def insert(self, fg: 'FiniteGenerator', at: int, *args, **kwargs) -> 'Generator':
+        """
+        Inserts another generator into this one at a specified index, returning a new generator that produces the combined sequence.
+
+        Args:
+            fg (FiniteGenerator): The generator to insert.
+            at (int): The non-negative index at which to insert the new generator.  
+            The first term of ``fg`` will become the *at*-th term of the resulting sequence.
+
+        Returns:
+            Generator: A new generator that produces the combined sequence with ``fg`` inserted at the specified index.
+        
+        Raises:
+            ValueError: If ``at`` is negative.
+            TypeError: If ``fg`` is not a :class:`FiniteGenerator`.
+        """
+        if at < 0:
+            raise ValueError(f"Input 'at' must be non-negative, got {at}.")
+        
+        if not isinstance(fg, FiniteGenerator):
+            raise TypeError(f"Input 'fg' must be a FiniteGenerator, got {type(fg).__name__}.")
+
+        s = fg.size
+        if s == 0:
+            return self
+        
+        start = at
+        end = at + s
+        
+        def _inserted_generator(n: int) -> int:
+            if n < start:
+                return self(n)
+            elif n < end:
+                return fg(n - start)
+            else:
+                return self(n - s)
+
+        return type(self)(generator=_inserted_generator)
+    
+    def prepend(self, fg: 'FiniteGenerator', *args, **kwargs) -> 'Generator':
+        """
+        Prepends another generator to this one, returning a new generator that produces the combined sequence.
+        Equivalent to ``self.insert(fg, at=0)``.
+
+        Args:
+            fg (FiniteGenerator): The generator to prepend.  The first term of ``fg`` will become the first term of the resulting sequence.
+
+        Returns:
+            Generator: A new generator that produces the combined sequence with ``fg`` prepended to this generator.
+        """
+        return self.insert(fg, at=0, *args, **kwargs)
+        
     def __call__(self, n: int) -> int:
         """
         Calls the underlying generator and validates its output.
@@ -122,8 +196,10 @@ class CachedGenerator(Generator):
             generator (Callable[[int], int]): A callable that maps a
                 non-negative index *n* to a strictly positive integer.
         """
+        if isinstance(generator, type(self)):
+            return
+        
         super().__init__(generator=generator, *args, **kwargs)
-        self.cached = True
         self._cache_handler = CacheHandler(OrdinalCache())
         self.generator = SetLightCache(func=generator, cache_handler=self._cache_handler)
 
@@ -137,12 +213,77 @@ class CachedGenerator(Generator):
         """The :class:`~catena.cache.CacheHandler` managing the cache lifecycle."""
         return self._cache_handler
     
+    @override
+    def advance(self, n: int, copy_cache: bool = False) -> 'CachedGenerator':
+        """
+        Advances the generator by *n* steps, optionally copying relevant cache entries.
+
+        Args:
+            n (int): Non-negative number of steps to advance.
+            copy_cache (bool, optional): If ``True``, cache entries for indices
+                greater than or equal to *n* are copied to the new generator,
+                adjusted to reflect the new indexing.  If ``False`` (default),
+                the new generator starts with an empty cache.
+
+        Returns:
+            CachedGenerator: A new generator that produces the same sequence starting from the *n*-th term, with cache entries copied if requested.
+        Raises:
+            ValueError: If ``n`` is negative.
+        """
+        if n == 0:
+            return self
+        
+        h = CachedGenerator(super().advance(n))
+        if copy_cache:
+            new_cache = OrdinalCache()
+            for k, v in self.cache.items():
+                if (s:=k-n) >= 0:
+                    new_cache[s] = v
+            h.cache_handler._set_cache(new_cache)
+        return h
+    
+    @override
+    def insert(self, fg: 'FiniteGenerator', at: int, copy_cache: bool = False, *args, **kwargs) -> 'CachedGenerator':
+        """
+        Inserts another generator into this one at a specified index, optionally copying relevant cache entries.
+        Args:
+            fg (FiniteGenerator): The generator to insert.
+            at (int): The non-negative index at which to insert the new generator.  
+            The first term of ``fg`` will become the *at*-th term of the resulting sequence.
+            copy_cache (bool, optional): If ``True``, cache entries for indices
+                greater than or equal to *at* are copied to the new generator,
+                adjusted to reflect the new indexing.  If ``False`` (default),
+                the new generator starts with an empty cache.
+        Returns:
+            CachedGenerator: A new generator that produces the combined sequence with ``fg`` inserted 
+            at the specified index, with cache entries copied if requested.
+        Raises:
+            ValueError: If ``at`` is negative.
+            TypeError: If ``fg`` is not a :class:`FiniteGenerator`.
+        """
+        h = CachedGenerator(super().insert(fg, at))
+        if copy_cache:
+            new_cache = OrdinalCache()
+            for k, v in self.cache.items():
+                if k < at:
+                    new_cache[k] = v
+                else:
+                    new_cache[k + fg.size] = v
+            h.cache_handler._set_cache(new_cache)
+        return h
+
     def reset_cache(self) -> None:
         """Clears all entries from the cache, freeing the memoised results."""
         self._cache_handler.reset_cache()
 
     def __str__(self) -> str:
-        return f"CachedGenerator(generator={self.generator.func.__name__}, cached={self.cached}, cache_size={len(self.cache)})"
+        return f"CachedGenerator(generator={self.generator.func.__name__}, cache_size={len(self.cache)})"
+    
+    def __new__(cls, generator, *args, **kwargs):
+        if isinstance(generator, cls):
+            return generator
+        
+        return object.__new__(cls) 
     
 
 
@@ -162,11 +303,6 @@ class FiniteGenerator(Generator):
     _bounds: dict[str, tuple[int, int]] = {
         code: (0, (1 << (array(code, []).itemsize * 8)) - 1) for code in _dtypes
     }
-
-    def __new__(cls, data, dtype=None, *args, **kwargs):
-        if isinstance(data, cls):
-            return data
-        return object.__new__(cls)
 
     def __init__(self, data: Sequence[int], dtype: str = None, *args, **kwargs):
         """
@@ -235,6 +371,49 @@ class FiniteGenerator(Generator):
             return self._data[n]
 
         super().__init__(generator=_at, *args, **kwargs)
+
+    @override
+    def advance(self, n: int) -> 'FiniteGenerator':
+        if n > self.size:
+            raise IndexError(f"Cannot advance beyond the end of the sequence (size {self.size}), got n={n}.")
+        
+        if n < 0:
+            raise ValueError(f"Input n must be non-negative, got {n}.")
+        
+        if n == 0:
+            return self
+        
+        # In theory we could pass dtype=None to the new instance and let it choose the smallest 
+        # fitting typecode for the advanced sequence, but in practice this would be inefficient 
+        # since it would require scanning the remaining data to find the new max value. Instead, 
+        # we can safely reuse the same dtype since advancing can only reduce the max value 
+        # (or keep it the same if all values are equal).
+        return FiniteGenerator(self._data[n:], dtype=self.dtype)
+
+    @override
+    def insert(self, fg: 'FiniteGenerator', at: int) -> 'FiniteGenerator':
+        if at < 0:
+            raise ValueError(f"Input 'at' must be non-negative, got {at}.")
+        
+        if at > self.size:
+            raise IndexError(f"Cannot insert beyond the end of the sequence (size {self.size}), got at={at}.")
+
+        if not isinstance(fg, FiniteGenerator):
+            raise TypeError(f"Input 'fg' must be a FiniteGenerator, got {type(fg).__name__}.")
+        
+        new_data = self._data[:at] + fg._data + self._data[at:]
+        dtype = None
+        if self.max > fg.max:
+            dtype = self.dtype
+        else:
+            dtype = fg.dtype
+
+        return FiniteGenerator(new_data, dtype=dtype)
+
+    def __new__(cls, data, dtype=None, *args, **kwargs):
+        if isinstance(data, cls):
+            return data
+        return object.__new__(cls)
 
     @property
     def size(self) -> int:
@@ -360,6 +539,62 @@ class PeriodicGenerator(Generator):
                 return self._period[n % len(self._period)]
 
         super().__init__(generator=_at, *args, **kwargs)
+
+    @override
+    def advance(self, n: int) -> 'PeriodicGenerator':
+        if n < 0:
+            raise ValueError(f"Input n must be non-negative, got {n}.")
+        elif n == 0:
+            return self
+        else:
+            # Advancing a periodic generator effectively rotates the pre-period and period.
+            if n < len(self.pre_period): # advance pre-period, period stays the same
+                new_pre_period = self.pre_period[n:]
+                new_period = self.period
+            else: # pre-period is exhausted, rotate the period accordingly
+                n -= len(self.pre_period)
+                rotation = n % len(self.period)
+                new_pre_period = () # original pre-period is fully consumed, and the rest is a new shifter period
+                new_period = self.period[rotation:] + self.period[:rotation]
+            return PeriodicGenerator(period=new_period, pre_period=new_pre_period, dtypes=(self.period.dtype, self.pre_period.dtype))
+
+
+    @override
+    def insert(self, fg: 'FiniteGenerator', at: int) -> 'PeriodicGenerator':
+        """
+        Inserts a finite generator into this periodic generator at a specified index, returning a 
+        new periodic generator that produces the combined sequence. 
+
+        Args:
+            fg (FiniteGenerator): The generator to insert.
+            at (int): The non-negative index at which to insert the new generator.  
+            The first term of ``fg`` will become the *at*-th term of the resulting sequence.
+
+        Returns:
+            PeriodicGenerator: A new generator that produces the combined sequence with ``fg`` inserted at the specified index.
+        
+        """
+        # TODO: There are times when inserting would make the period rotate
+        # (e.g. inserting [3] at at=0 into [1,2,3] would give [3,1,2,3,1,2,3,...] which has period [3,1,2] instead of [1,2,3]). 
+        # We should detect this and rotate the period accordingly to maintain the original order of terms.
+        if at < 0:
+            raise ValueError(f"Input 'at' must be non-negative, got {at}.")
+        
+        new_period = self.period
+        if at <= len(self.pre_period):
+            new_pre_period = self.pre_period[:at] + fg._data + self.pre_period[at:]
+            dtype = max((self.pre_period.dtype or 'A'), (fg.dtype or 'A')) # _dtypes are ordered from smallest to largest, so max gives the smallest fitting typecode for the combined sequence
+            if dtype == 'A': # if one of the sequences is None, keep dtype None
+                dtype = None
+        else:
+            at -= len(self.pre_period)
+            split = at % len(self.period)
+            new_pre_period = self.pre_period._data + self.period[:split] + fg._data + self.period[split:]
+            dtype = max((self.pre_period.dtype or 'A'), (fg.dtype or 'A'), (self.period.dtype or 'A')) 
+            if dtype == 'A':
+                dtype = None
+        
+        return PeriodicGenerator(period=new_period, pre_period=new_pre_period, dtypes=(self.period.dtype, dtype))
 
     @property
     def period(self) -> FiniteGenerator:

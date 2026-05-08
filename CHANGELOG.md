@@ -9,6 +9,56 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Added
+
+- `Generator.advance(n)`: returns a new generator whose *k*-th term equals the
+  original's *(n+k)*-th term.  Raises `ValueError` for negative *n*; returns
+  `self` for `n == 0`.  Return type follows `type(self)` so all subclasses
+  inherit correct dispatch automatically.
+- `Generator.insert(fg, at)`: inserts a `FiniteGenerator` at the given index,
+  returning a new generator that splices the two sequences together.  Returns
+  `self` when `fg` is empty.
+- `Generator.prepend(fg)`: convenience alias for `insert(fg, at=0)`.
+- `CachedGenerator.advance(n, copy_cache=False)`: override that optionally
+  copies and re-indexes cache entries whose key ≥ *n* into the new generator
+  (shifting keys by −*n*).
+- `CachedGenerator.insert(fg, at, copy_cache=False)`: override that optionally
+  copies cache entries; entries at indices < *at* are kept as-is; entries at
+  indices ≥ *at* are shifted forward by `fg.size`.
+- `FiniteGenerator.advance(n)`: slices the internal data array from *n*
+  onward; raises `IndexError` if `n > size`.  Advancing exactly to `size`
+  returns an empty `FiniteGenerator`.
+- `FiniteGenerator.insert(fg, at)`: concatenates the underlying data arrays
+  and selects the larger of the two dtypes; raises `IndexError` if
+  `at > size`.
+- `PeriodicGenerator.advance(n)`: exhausts the pre-period first, then rotates
+  the period by `n % len(period)`.
+- `PeriodicGenerator.insert(fg, at)`: inserts into the pre-period when
+  `at ≤ len(pre_period)`; otherwise folds the relevant portion of the period
+  into an extended pre-period while keeping the original period intact.
+- `SimpleContinuedFraction.__neg__`: returns the additive inverse as a new SCF
+  of the same type, using `advance` and `prepend`; two branches handle *a₁ > 1*
+  and *a₁ = 1* separately.
+- `FiniteSimpleContinuedFraction.__neg__`: delegates to `from_rational` for
+  `size ≤ 2` (avoids accessing a potentially absent *a₂*); calls `super().__neg__()`
+  for larger SCFs.
+- `PeriodicSimpleContinuedFraction.__neg__`: trivial negation via the quadratic
+  surd representation — maps *(P + √D) / Q* to *(P + √D) / (−Q)*.
+- `PeriodicSimpleContinuedFraction.__init__`: accepts a `PeriodicGenerator`
+  instance directly as the `period` argument, bypassing re-construction.
+
+### Removed
+
+- `Generator.cached` and `CachedGenerator.cached` attributes (use
+  `isinstance(g, CachedGenerator)` to test for caching instead).
+
+### Fixed
+
+- `CachedGenerator`: passing a `CachedGenerator` instance to the constructor
+  now returns the same object (identity short-circuit via `__new__` +
+  `__init__` early-return guard) rather than wrapping it in a second layer.
+- Removed stray debug `print` from `mathlib/convert.py`.
+
 ---
 
 ## [0.3.0] — 2026-05-07

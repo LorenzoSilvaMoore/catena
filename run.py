@@ -483,16 +483,16 @@ if __name__ == "__main__":
     # _str = catena.strings.safe_int_str
     # print(f"Tail convergent 100,000: {tuple(map(_str, phi.tail_convergent(100_000)))}")
     # print(f"Tail convergent 100,000: {tuple(map(_str, phi.convergent(100_000)))}")
-    phi = catena.PeriodicSimpleContinuedFraction(period=(1,), pre_period=(), integer_part=0)
+    # phi = catena.PeriodicSimpleContinuedFraction(period=(1,), pre_period=(), integer_part=0)
     
-    for k in range(0, 100):
-        c_k = phi.convergent(k)
-        c_next = phi.convergent(k+1)
-        c_next2 = phi.convergent(k+2)
-        # print(f"Determinant of convergents {k} and {k+1}: {c_k[0]*c_next[1] - c_k[1]*c_next[0]}")
-        # print(f"Difference between convergents {k} and {k+2}: {(c_k[0]*c_next2[1] - c_k[1]*c_next2[0])}")
-        print(f"Value of q_{k} * q_{k+1}: {c_k[1]} * {c_next[1]} = {c_k[1] * c_next[1]}. Bigger than e17: {c_k[1] * c_next[1] > 10**17}")
-        print(f"Value of convergent {k}: {c_k[0]/c_k[1]}")
+    # for k in range(0, 100):
+    #     c_k = phi.convergent(k)
+    #     c_next = phi.convergent(k+1)
+    #     c_next2 = phi.convergent(k+2)
+    #     # print(f"Determinant of convergents {k} and {k+1}: {c_k[0]*c_next[1] - c_k[1]*c_next[0]}")
+    #     # print(f"Difference between convergents {k} and {k+2}: {(c_k[0]*c_next2[1] - c_k[1]*c_next2[0])}")
+    #     print(f"Value of q_{k} * q_{k+1}: {c_k[1]} * {c_next[1]} = {c_k[1] * c_next[1]}. Bigger than e17: {c_k[1] * c_next[1] > 10**17}")
+        # print(f"Value of convergent {k}: {c_k[0]/c_k[1]}")
 
     # for k in range(1, 100, 2):
     #     c_k = phi.convergent(k)
@@ -520,3 +520,39 @@ if __name__ == "__main__":
 
     # q_uv = q_u*q_v + q_u1*q_v_
     # print(f"q_uv vs real q_uv: {q_uv} vs {scf_uv.terminal_convergent[1]}")
+
+
+    phi = catena.PeriodicSimpleContinuedFraction(period=(1,), pre_period=(), integer_part=0)
+
+    print(float(phi))
+
+    print((-phi,))
+
+    # c = Fraction(*phi.convergent(50))
+    # inv = 1-c
+
+    # phi_inv = catena.FiniteSimpleContinuedFraction.from_rational(inv)
+    # print(f"Inverse of phi as FSCF: {phi_inv}")
+
+    # sqrt2_frac = catena.PeriodicSimpleContinuedFraction(period=(2,), pre_period=(), integer_part=0)
+
+    # c2 = Fraction(*sqrt2_frac.convergent(50))
+    # inv2 = 1 - c2
+    # sqrt2_inv = catena.FiniteSimpleContinuedFraction.from_rational(inv2)
+    # print(f"Inverse of sqrt(2) as FSCF: {sqrt2_inv}")
+
+
+    # periodic = catena.PeriodicSimpleContinuedFraction(period=(1, 2, 3), pre_period=(4, 5), integer_part=0)
+    finite = catena.FiniteSimpleContinuedFraction(partial_quotients=(1,), integer_part=0)
+    print(finite)
+    print(-finite)
+    # inserted = periodic.generator.insert(finite.generator, 2)
+    # print(f"Inserted generator: {inserted}")
+    # print(f"First 40 partial quotients of inserted generator: {tuple(inserted(i) for i in range(40))}")
+
+    print(float(finite))
+    print(float(-finite))
+
+    print(f"Negate finite by negating is value as Fraction and converting back to FSCF: {(y:=catena.FiniteSimpleContinuedFraction.from_rational(-Fraction(*finite.terminal_convergent)))}")
+
+    print(f"Float of negated finite: {float(y)}")

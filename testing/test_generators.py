@@ -2,7 +2,7 @@ import pytest
 from array import array
 
 import catena.generators as gen_module
-from catena.generators import Generator, CachedGenerator, FiniteGenerator
+from catena.generators import Generator, CachedGenerator, FiniteGenerator, PeriodicGenerator
 
 
 # ---------------------------------------------------------------------------
@@ -290,10 +290,398 @@ def test_cached_generator_not_idempotent_with_finite():
     assert isinstance(cg, CachedGenerator)
 
 
+# ---------------------------------------------------------------------------
+# Generator -> CachedGenerator
+# ---------------------------------------------------------------------------
+
+def test_generator_to_cached_generator():
+    g = Generator(lambda n: n + 1)
+    cg = CachedGenerator(g)
+    assert isinstance(cg, CachedGenerator)
+    assert cg(0) == 1
+    assert cg(9) == 10
+    # Cache should be populated after calls
+    assert 0 in cg.cache
+    assert 9 in cg.cache
+    assert cg.cache[0] == 1
+    assert cg.cache[9] == 10
+
+# ---------------------------------------------------------------------------
+# .advance – basic functionality
+# ---------------------------------------------------------------------------
+
+# _data produces g(n) = n+1 for n in [0, 199] — large enough for all advance tests.
+# FiniteGenerator and PeriodicGenerator are constructed from this fixed sequence so they
+# behave identically to Generator(lambda n: n+1) for indices 0..199.
+_advance_data = list(range(1, 201))
+
+@pytest.fixture(params=[
+    pytest.param("Generator",         id="Generator"),
+    pytest.param("CachedGenerator",   id="CachedGenerator"),
+    pytest.param("FiniteGenerator",   id="FiniteGenerator"),
+    pytest.param("PeriodicGenerator", id="PeriodicGenerator"),
+])
+def make_generator(request):
+    """Returns a zero-argument factory producing a fresh generator whose n-th value equals n+1."""
+    factories = {
+        "Generator":         lambda: Generator(lambda n: n + 1),
+        "CachedGenerator":   lambda: CachedGenerator(lambda n: n + 1),
+        "FiniteGenerator":   lambda: FiniteGenerator(_advance_data),
+        "PeriodicGenerator": lambda: PeriodicGenerator(period=_advance_data, pre_period=()),
+    }
+    return factories[request.param]
+
+def test_advance_basic(make_generator):
+    g = make_generator()
+    ag = g.advance(5)
+    assert ag(0) == 6
+    assert ag(1) == 7
+    assert ag(4) == 10
+
+def test_advance_negative_raises(make_generator):
+    g = make_generator()
+    with pytest.raises(ValueError):
+        g.advance(-1)
+
+def test_idempotent_advance_at_zero(make_generator):
+    g = make_generator()
+    ag = g.advance(0)
+    assert ag is g
+
+def test_advance_multiple_times(make_generator):
+    g = make_generator()
+    ag1 = g.advance(3)
+    ag2 = ag1.advance(2)
+    ag3 = g.advance(5)
+    assert ag1(0) == 4
+    assert ag1(1) == 5
+    assert ag2(0) == 6
+    assert ag2(1) == 7
+    assert ag3(41) == ag2(41)  # advance(5) from g should be same as advance(2) from advance(3)
+    assert ag3(97) == ag2(97)
+
+def test_advance_does_not_modify_original(make_generator):
+    g = make_generator()
+    ag = g.advance(5)
+    assert g(0) == 1
+    assert g(4) == 5
+    assert ag(0) == 6
+    assert ag(4) == 10
+
+def test_advance_idempotent_at_zero(make_generator):
+    g = make_generator()
+    ag = g.advance(0)
+    assert ag is g
+
+def test_advance_preserves_type(make_generator):
+    g = make_generator()
+    ag = g.advance(5)
+    assert type(ag) is type(g)
+
+
+# ---------------------------------------------------------------------------
+# .advance – special or edge cases
+# ---------------------------------------------------------------------------
+
+def test_advance_periodic_with_preperiod():
+    # For a PeriodicGenerator with pre-period, advance should skip the pre-period first, then advance into the period.
+    pre = [3, 1, 7, 5]
+    period = [2, 4]
+    pg = PeriodicGenerator(period=period, pre_period=pre)
+    ag = pg.advance(2)  
+    assert ag(0) == 7   # first step is 3, second step is 1, third step is 7
+    assert ag(1) == 5   # fourth step is 5, then period starts
+    assert ag(2) == 2   # first step into period is 2
+    assert ag(3) == 4   # second step into period is 4
+    assert ag.period is pg.period  # period object should be shared, not copied
+
+def test_advance_periodic_wraps_around():
+    # For a pure PeriodicGenerator, advance should just wrap around the period.
+    period = [2, 4]
+    pg = PeriodicGenerator(period=period)
+    ag = pg.advance(3)  # should advance 3 steps into the period, wrapping around
+    assert ag(0) == 4   # first step is 2, second step is 4, third step wraps back to 2
+    assert ag(1) == 2
+    assert ag(2) == 4
+    assert ag.period is not pg.period  # period object can not be the same object after period mutated
+
+def test_advance_periodic_with_preperiod_turns_overflown():
+    # For a PeriodicGenerator with pre-period, advance should skip the pre-period first, then advance into the period.
+    pre = [3, 1]
+    period = [2, 4]
+    pg = PeriodicGenerator(period=period, pre_period=pre)
+    ag = pg.advance(3)  # should skip pre-period (2 steps) and then advance 1 step into period
+    assert ag(0) == 4   # first step into period is 2, second step is 4, third step wraps back to 2
+    assert ag(1) == 2
+    assert ag(2) == 4
+    assert len(ag.pre_period) == 0
+    assert ag.period is not pg.period  # period object can not be the same object after period mutated
+
+
+def test_advance_finite_generator_beyond_end():
+    fg = FiniteGenerator([10, 20, 30])
+    ag = fg.advance(2)
+    assert ag(0) == 30
+    with pytest.raises(IndexError):
+        ag(1)  # advancing beyond the end of a FiniteGenerator should raise
+
+def test_advance_finite_generator_to_empty():
+    fg = FiniteGenerator([10, 20, 30])
+    ag = fg.advance(3)  # advance exactly to the end
+    assert isinstance(ag, FiniteGenerator)
+    assert ag.size == 0
+
+def test_advance_finite_generator_past_end_raises():
+    fg = FiniteGenerator([10, 20, 30])
+    with pytest.raises(IndexError):
+        fg.advance(4)
+
+def test_advance_periodic_at_exact_preperiod_boundary():
+    # advance by exactly len(pre_period) exhausts the pre-period; rotation = 0 so period is unchanged.
+    pre = [3, 1]
+    period = [2, 4]
+    pg = PeriodicGenerator(period=period, pre_period=pre)
+    ag = pg.advance(2)
+    assert len(ag.pre_period) == 0
+    assert list(ag.period) == [2, 4]  # no rotation
+    assert ag(0) == 2
+    assert ag(1) == 4
+    assert ag(2) == 2  # wraps
+
+def test_advance_periodic_by_full_period_length():
+    # advance by full period length → same sequence as original (rotation = 0)
+    period = [2, 4, 6]
+    pg = PeriodicGenerator(period=period)
+    ag = pg.advance(len(period))
+    for i in range(12):
+        assert ag(i) == pg(i)
+
+def test_cached_advance_no_copy_cache():
+    cg = CachedGenerator(lambda n: n + 1)
+    for i in range(10):
+        cg(i)
+    ag = cg.advance(3)  # copy_cache defaults to False
+    assert len(ag.cache) == 0
+
+def test_cached_advance_copy_cache_shifts_entries():
+    cg = CachedGenerator(lambda n: n + 1)
+    for i in range(10):
+        cg(i)  # cache: {0:1, 1:2, ..., 9:10}
+    ag = cg.advance(3, copy_cache=True)
+    # entries 3..9 shift to 0..6
+    for k in range(7):
+        assert k in ag.cache
+        assert ag.cache[k] == k + 4  # ag(k) = cg(k+3) = k+4
+    # entries 0,1,2 are not copied (they precede the advance point)
+    assert all(ag.cache[k] >= 4 for k in ag.cache)
+
+
+# ---------------------------------------------------------------------------
+# .insert – basic functionality
+# ---------------------------------------------------------------------------
+
+def test_insert_finite_into_generator(make_generator):
+    g = make_generator()
+    fg = FiniteGenerator([10, 20, 30])
+    cg = CachedGenerator(g).insert(fg, at=1)
+    assert isinstance(cg, CachedGenerator)
+    assert cg(0) == 1
+    assert cg(1) == 10
+    assert cg(2) == 20
+    assert cg(3) == 30
+    assert cg(4) == 2 # resumes original generator after inserted finite sequence
+    assert cg(5) == 3
+
+def test_insert_finite_into_generator_copy_cache(make_generator):
+    g = make_generator()
+    cg = CachedGenerator(g)
+    # Populate cache for first few values
+    for i in range(9):
+        cg(i)
+    fg = FiniteGenerator([10, 20, 30])
+    cg2 = cg.insert(fg, at=2, copy_cache=True)
+    assert isinstance(cg2, CachedGenerator)
+    # Cache entries for indices < 2 should be copied
+    assert 0 in cg2.cache and cg2.cache[0] == 1
+    assert 1 in cg2.cache and cg2.cache[1] == 2
+    # Cache entries for indices >= 2 should be shifted by fg.size (3)
+    assert 5 in cg2.cache and cg2.cache[5] == 3
+    assert 6 in cg2.cache and cg2.cache[6] == 4
+
+
+def test_insert_finite_into_generator_no_copy_cache(make_generator):
+    g = make_generator()
+    cg = CachedGenerator(g)
+    # Populate cache for first few values
+    for i in range(9):
+        cg(i)
+    fg = FiniteGenerator([10, 20, 30])
+    cg2 = cg.insert(fg, at=2, copy_cache=False)
+    assert isinstance(cg2, CachedGenerator)
+    # No cache entries should be copied
+    assert len(cg2.cache) == 0
+
+
+def test_insert_finite_into_generator_invalid_at(make_generator):
+    g = make_generator()
+    fg = FiniteGenerator([10, 20, 30])
+    with pytest.raises(ValueError):
+        CachedGenerator(g).insert(fg, at=-1)
+
+def test_insert_finite_into_generator_invalid_fg(make_generator):
+    g = make_generator()
+    if not isinstance(g, FiniteGenerator):
+        with pytest.raises(TypeError):
+            CachedGenerator(g).insert(g, at=0)
+
+def test_insert_finite_into_generator_invalid_fg_type(make_generator):
+    g = make_generator()
+    with pytest.raises(TypeError):
+        CachedGenerator(g).insert("not a generator", at=0)
+
+def test_insert_finite_into_generator_preserves_type(make_generator):
+    g = make_generator()
+    fg = FiniteGenerator([10, 20, 30])
+    ag = g.insert(fg, at=1)
+    assert type(ag) is type(g)
+
+
+# ---------------------------------------------------------------------------
+# .insert – FiniteGenerator-specific behavior
+# ---------------------------------------------------------------------------
+
+
+def test_insert_finite_into_finite_generator():
+    fg1 = FiniteGenerator([1, 2, 3])
+    fg2 = FiniteGenerator([10, 20])
+    fg3 = fg1.insert(fg2, at=1)
+    assert isinstance(fg3, FiniteGenerator)
+    assert list(fg3) == [1, 10, 20, 2, 3]
+
+def test_insert_finite_into_finite_generator_invalid_at():
+    fg1 = FiniteGenerator([1, 2, 3])
+    fg2 = FiniteGenerator([10, 20])
+    with pytest.raises(ValueError):
+        fg1.insert(fg2, at=-1)
+    with pytest.raises(IndexError):
+        fg1.insert(fg2, at=4)  # out of bounds
+
+def test_insert_finite_into_finite_generator_invalid_fg():
+    fg1 = FiniteGenerator([1, 2, 3])
+    g = Generator(lambda n: n + 1)
+    with pytest.raises(TypeError):
+        fg1.insert(g, at=0)  # cannot insert a non-FiniteGenerator into a FiniteGenerator
+    with pytest.raises(TypeError):
+        fg1.insert("not a generator", at=0)
+
+def test_insert_empty_fg_returns_self():
+    g = Generator(lambda n: n + 1)
+    empty = FiniteGenerator([])
+    assert g.insert(empty, at=0) is g
+
+def test_prepend_equals_insert_at_zero():
+    g = Generator(lambda n: n + 1)
+    fg = FiniteGenerator([10, 20])
+    via_insert = g.insert(fg, at=0)
+    via_prepend = g.prepend(fg)
+    for i in range(10):
+        assert via_insert(i) == via_prepend(i)
+
+def test_insert_at_large_index():
+    # inserting well beyond current calls leaves earlier indices unchanged
+    g = Generator(lambda n: n + 1)
+    fg = FiniteGenerator([99])
+    result = g.insert(fg, at=100)
+    for i in range(100):
+        assert result(i) == i + 1  # unchanged prefix
+    assert result(100) == 99       # inserted element
+    assert result(101) == 101      # resumes: original index 100 → value 101
+
+def test_finite_insert_at_zero():
+    fg1 = FiniteGenerator([1, 2, 3])
+    fg2 = FiniteGenerator([10])
+    result = fg1.insert(fg2, at=0)
+    assert isinstance(result, FiniteGenerator)
+    assert list(result) == [10, 1, 2, 3]
+
+def test_finite_insert_at_end():
+    fg1 = FiniteGenerator([1, 2, 3])
+    fg2 = FiniteGenerator([10, 20])
+    result = fg1.insert(fg2, at=3)  # append
+    assert isinstance(result, FiniteGenerator)
+    assert list(result) == [1, 2, 3, 10, 20]
+
+def test_finite_insert_dtype_promoted_to_larger():
+    # both sequences same dtype ('B'), result dtype is 'B'
+    fg1 = FiniteGenerator([1, 2, 3])  # dtype B
+    fg2 = FiniteGenerator([4, 5])     # dtype B
+    result = fg1.insert(fg2, at=1)
+    assert result.dtype == 'B'
+    assert list(result) == [1, 4, 5, 2, 3]
+
+
+# ---------------------------------------------------------------------------
+# .insert – PeriodicGenerator-specific behavior
+# ---------------------------------------------------------------------------
+
+def test_periodic_insert_into_preperiod():
+    pg = PeriodicGenerator(period=[2, 4], pre_period=[1, 3])
+    fg = FiniteGenerator([10])
+    result = pg.insert(fg, at=1)
+    assert isinstance(result, PeriodicGenerator)
+    # new pre_period = [1, 10, 3], period unchanged
+    assert result(0) == 1
+    assert result(1) == 10
+    assert result(2) == 3
+    assert result(3) == 2   # period starts
+    assert result(4) == 4
+    assert result(5) == 2   # wraps
+
+def test_periodic_insert_at_preperiod_boundary():
+    # at == len(pre_period): inserted element becomes new last pre-period term
+    pg = PeriodicGenerator(period=[2, 4], pre_period=[1, 3])
+    fg = FiniteGenerator([10])
+    result = pg.insert(fg, at=2)
+    assert isinstance(result, PeriodicGenerator)
+    assert result(0) == 1
+    assert result(1) == 3
+    assert result(2) == 10  # inserted at boundary
+    assert result(3) == 2   # period starts
+    assert result(4) == 4
+    assert result(5) == 2   # wraps
+
+def test_periodic_insert_into_period_body():
+    # at > len(pre_period): insert splits into pre_period + partial_period + fg + rest
+    # pre=[1,3], period=[2,4], insert [10] at at=3 (1 step into period)
+    # new_pre = [1, 3, 2, 10, 4], new_period = [2, 4]
+    pg = PeriodicGenerator(period=[2, 4], pre_period=[1, 3])
+    fg = FiniteGenerator([10])
+    result = pg.insert(fg, at=3)
+    assert isinstance(result, PeriodicGenerator)
+    assert result(0) == 1
+    assert result(1) == 3
+    assert result(2) == 2
+    assert result(3) == 10
+    assert result(4) == 4
+    assert result(5) == 2   # period restarts
+    assert result(6) == 4
+
+def test_periodic_insert_preserves_period_object_when_in_preperiod():
+    # inserting within the pre-period does not alter the period FiniteGenerator
+    pg = PeriodicGenerator(period=[2, 4], pre_period=[1, 3])
+    fg = FiniteGenerator([10])
+    result = pg.insert(fg, at=0)
+    assert result.period is pg.period  # period unchanged → same object
+
+def test_periodic_insert_invalid_at():
+    pg = PeriodicGenerator(period=[2, 4], pre_period=[1, 3])
+    fg = FiniteGenerator([10])
+    with pytest.raises(ValueError):
+        pg.insert(fg, at=-1)
+
 # ===========================================================================
 # PeriodicGenerator
 # ===========================================================================
-from catena.generators import PeriodicGenerator
 from math import gcd as _gcd
 
 

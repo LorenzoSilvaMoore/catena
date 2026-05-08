@@ -854,3 +854,81 @@ def test_segment_below_size_preserves_integer_part():
     scf = FiniteSimpleContinuedFraction([1, 2, 3, 4, 5], integer_part=7)
     seg = scf.segment(2)
     assert seg.integer_part == 7
+
+
+# ===========================================================================
+# __neg__
+# ===========================================================================
+# Reference values (exact fractions):
+#   [3]          = 3          → neg = -3           = [-3]
+#   [0; 2]       = 1/2        → neg = -1/2         = [-1; 2]
+#   [1; 2]       = 3/2        → neg = -3/2         = [-2; 2]
+#   [0; 1, 2]    = 3/2? No:   = 1/(1+1/2)=2/3      → neg = -2/3 = [-1; 1, 2]? 
+#                              -2/3 = -1 + 1/3 = [-1; 3]
+#   [1; 3, 5]    = 1+5/16=21/16 → neg=-21/16=[-2;1,2,5]   (uses super().__neg__)
+#   [1; 1, 2, 3] = 1+1/(1+1/(2+1/3))=... uses super().__neg__, a₁=1
+#
+# All hand-verified with Fraction arithmetic.
+# ===========================================================================
+
+def _neg_value(scf) -> Fraction:
+    """Exact rational value of the negation, via Fraction."""
+    return -Fraction(*scf.terminal_convergent)
+
+
+def test_neg_size_zero_integer_only():
+    scf = FiniteSimpleContinuedFraction([], integer_part=3)
+    result = -scf
+    assert isinstance(result, FiniteSimpleContinuedFraction)
+    assert Fraction(*result.terminal_convergent) == Fraction(-3)
+
+
+def test_neg_size_one_a1_greater_than_one():
+    # [0; 2] = 1/2  →  -1/2 = [-1; 2]
+    scf = FiniteSimpleContinuedFraction([2], integer_part=0)
+    result = -scf
+    assert isinstance(result, FiniteSimpleContinuedFraction)
+    assert Fraction(*result.terminal_convergent) == Fraction(-1, 2)
+
+
+def test_neg_size_two_a1_equals_one():
+    # [0; 1, 2] = 2/3  →  -2/3 = [-1; 3]
+    scf = FiniteSimpleContinuedFraction([1, 2], integer_part=0)
+    result = -scf
+    assert Fraction(*result.terminal_convergent) == Fraction(-2, 3)
+
+
+def test_neg_size_three_a1_greater_than_one():
+    # [1; 3, 5] = 21/16  →  -21/16 = [-2; 1, 2, 5]  (uses super().__neg__)
+    scf = FiniteSimpleContinuedFraction([3, 5], integer_part=1)
+    result = -scf
+    assert isinstance(result, FiniteSimpleContinuedFraction)
+    assert Fraction(*result.terminal_convergent) == Fraction(-21, 16)
+
+
+def test_neg_size_four_a1_equals_one():
+    # [1; 1, 2, 3] = ?  compute: 3+1/3=10/3, 2+3/10=23/10, 1+10/23=33/23, 1+23/33=56/33
+    # neg = -56/33  (uses super().__neg__ with a₁=1)
+    scf = FiniteSimpleContinuedFraction([1, 2, 3], integer_part=1)
+    result = -scf
+    expected = -Fraction(*scf.terminal_convergent)
+    assert Fraction(*result.terminal_convergent) == expected
+
+
+def test_neg_is_fscf_instance():
+    scf = FiniteSimpleContinuedFraction([2, 3], integer_part=1)
+    assert isinstance(-scf, FiniteSimpleContinuedFraction)
+
+
+def test_neg_float_equals_negative_float():
+    for pq, ip in [([2], 0), ([1, 2], 0), ([3, 5], 1), ([2, 3, 4], 2)]:
+        scf = FiniteSimpleContinuedFraction(pq, integer_part=ip)
+        assert float(-scf) == pytest.approx(-float(scf), rel=1e-12)
+
+
+def test_neg_involution():
+    # neg(neg(x)) has the same rational value as x
+    for pq, ip in [([2], 0), ([1, 2], 0), ([3, 5], 1), ([2, 3, 4], 2)]:
+        scf = FiniteSimpleContinuedFraction(pq, integer_part=ip)
+        result = -(-scf)
+        assert Fraction(*result.terminal_convergent) == Fraction(*scf.terminal_convergent)
