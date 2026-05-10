@@ -22,6 +22,7 @@ except PackageNotFoundError:
 from . import mathlib
 from . import strings
 from . import cache
+from . import numbers
 
 from .catena import (
     SimpleContinuedFraction,
@@ -33,6 +34,7 @@ from .generators import (
     Generator,
     CachedGenerator,
     FiniteGenerator,
+    PeriodicGenerator,
 )
 
 __all__ = [
@@ -42,4 +44,5 @@ __all__ = [
     "Generator",
     "CachedGenerator",
     "FiniteGenerator",
+    "PeriodicGenerator",
 ]

@@ -528,6 +528,20 @@ def test_str_contains_integer_part_value():
 
 
 # ---------------------------------------------------------------------------
+# __repr__
+# ---------------------------------------------------------------------------
+
+def test_repr_contains_class_name():
+    scf = SimpleContinuedFraction(ones)
+    assert "SimpleContinuedFraction" in repr(scf)
+
+
+def test_repr_contains_cache_handler():
+    scf = SimpleContinuedFraction(ones, integer_part=2)
+    assert "cache_handler" in repr(scf)
+
+
+# ---------------------------------------------------------------------------
 # __int__
 # ---------------------------------------------------------------------------
 

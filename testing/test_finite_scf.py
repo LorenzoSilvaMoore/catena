@@ -680,10 +680,30 @@ def test_add_scf_sum_matches_direct_rational_addition():
         p, q = (scf1 + scf2).terminal_convergent
         assert Fraction(p, q) == expected
 
+# TODO: delete
+# def test_add_float_returns_not_implemented(): # Its been implemented
+#     scf = FiniteSimpleContinuedFraction([2])
+#     assert scf.__add__(1.5) is NotImplemented
 
-def test_add_float_returns_not_implemented():
-    scf = FiniteSimpleContinuedFraction([2])
-    assert scf.__add__(1.5) is NotImplemented
+
+def test_add_float_returns_fscf():
+    scf = FiniteSimpleContinuedFraction([2], integer_part=0)  # 1/2
+    result = scf + 0.25
+    assert isinstance(result, FiniteSimpleContinuedFraction)
+    assert Fraction(*result.terminal_convergent) == Fraction(3, 4)
+
+
+def test_add_fraction_returns_fscf():
+    scf = FiniteSimpleContinuedFraction([3], integer_part=0)  # 1/3
+    result = scf + Fraction(1, 6)
+    assert Fraction(*result.terminal_convergent) == Fraction(1, 2)
+
+
+def test_add_decimal_returns_fscf():
+    from decimal import Decimal
+    scf = FiniteSimpleContinuedFraction([2], integer_part=0)  # 1/2
+    result = scf + Decimal('0.25')
+    assert Fraction(*result.terminal_convergent) == Fraction(3, 4)
 
 
 def test_add_string_returns_not_implemented():
@@ -694,6 +714,203 @@ def test_add_string_returns_not_implemented():
 def test_add_none_returns_not_implemented():
     scf = FiniteSimpleContinuedFraction([2])
     assert scf.__add__(None) is NotImplemented
+
+
+# ---------------------------------------------------------------------------
+# __sub__
+# ---------------------------------------------------------------------------
+
+def test_sub_fscf():
+    scf1 = FiniteSimpleContinuedFraction.from_rational(Fraction(3, 4))
+    scf2 = FiniteSimpleContinuedFraction.from_rational(Fraction(1, 4))
+    result = scf1 - scf2
+    assert Fraction(*result.terminal_convergent) == Fraction(1, 2)
+
+
+def test_sub_int():
+    scf = FiniteSimpleContinuedFraction([7], integer_part=3)  # 22/7
+    result = scf - 1
+    assert result.integer_part == 2
+
+
+def test_sub_fraction():
+    scf = FiniteSimpleContinuedFraction.from_rational(Fraction(3, 4))
+    result = scf - Fraction(1, 4)
+    assert Fraction(*result.terminal_convergent) == Fraction(1, 2)
+
+
+def test_sub_self_is_zero():
+    scf = FiniteSimpleContinuedFraction([3, 5], integer_part=1)
+    result = scf - scf
+    assert Fraction(*result.terminal_convergent) == Fraction(0)
+
+
+def test_sub_result_is_fscf():
+    scf1 = FiniteSimpleContinuedFraction.from_rational(Fraction(7, 5))
+    scf2 = FiniteSimpleContinuedFraction.from_rational(Fraction(3, 5))
+    assert isinstance(scf1 - scf2, FiniteSimpleContinuedFraction)
+
+
+# ---------------------------------------------------------------------------
+# __mul__
+# ---------------------------------------------------------------------------
+
+def test_mul_fscf_by_fscf():
+    scf1 = FiniteSimpleContinuedFraction.from_rational(Fraction(3, 4))
+    scf2 = FiniteSimpleContinuedFraction.from_rational(Fraction(2, 3))
+    result = scf1 * scf2
+    assert Fraction(*result.terminal_convergent) == Fraction(1, 2)
+
+
+def test_mul_by_int():
+    scf = FiniteSimpleContinuedFraction.from_rational(Fraction(1, 3))
+    result = scf * 3
+    assert Fraction(*result.terminal_convergent) == Fraction(1)
+
+
+def test_mul_by_fraction():
+    scf = FiniteSimpleContinuedFraction.from_rational(Fraction(3, 4))
+    result = scf * Fraction(4, 3)
+    assert Fraction(*result.terminal_convergent) == Fraction(1)
+
+
+def test_mul_by_float():
+    scf = FiniteSimpleContinuedFraction.from_rational(Fraction(1, 2))
+    result = scf * 2.0
+    assert Fraction(*result.terminal_convergent) == Fraction(1)
+
+
+def test_mul_commutativity():
+    scf1 = FiniteSimpleContinuedFraction.from_rational(Fraction(3, 7))
+    scf2 = FiniteSimpleContinuedFraction.from_rational(Fraction(5, 11))
+    assert (scf1 * scf2).terminal_convergent == (scf2 * scf1).terminal_convergent
+
+
+def test_mul_by_zero_gives_zero():
+    scf = FiniteSimpleContinuedFraction.from_rational(Fraction(7, 5))
+    result = scf * 0
+    assert Fraction(*result.terminal_convergent) == Fraction(0)
+
+
+def test_mul_result_is_fscf():
+    scf1 = FiniteSimpleContinuedFraction.from_rational(Fraction(3, 4))
+    scf2 = FiniteSimpleContinuedFraction.from_rational(Fraction(2, 3))
+    assert isinstance(scf1 * scf2, FiniteSimpleContinuedFraction)
+
+
+def test_mul_unsupported_type_returns_not_implemented():
+    scf = FiniteSimpleContinuedFraction([2])
+    assert scf.__mul__("x") is NotImplemented
+
+
+# ---------------------------------------------------------------------------
+# __truediv__
+# ---------------------------------------------------------------------------
+
+def test_div_fscf_by_fscf():
+    scf1 = FiniteSimpleContinuedFraction.from_rational(Fraction(3, 4))
+    scf2 = FiniteSimpleContinuedFraction.from_rational(Fraction(3, 8))
+    result = scf1 / scf2
+    assert Fraction(*result.terminal_convergent) == Fraction(2)
+
+
+def test_div_by_int():
+    scf = FiniteSimpleContinuedFraction.from_rational(Fraction(3, 4))
+    result = scf / 3
+    assert Fraction(*result.terminal_convergent) == Fraction(1, 4)
+
+
+def test_div_by_fraction():
+    scf = FiniteSimpleContinuedFraction.from_rational(Fraction(1, 2))
+    result = scf / Fraction(1, 4)
+    assert Fraction(*result.terminal_convergent) == Fraction(2)
+
+
+def test_div_by_float():
+    scf = FiniteSimpleContinuedFraction.from_rational(Fraction(1, 2))
+    result = scf / 0.5
+    assert Fraction(*result.terminal_convergent) == Fraction(1)
+
+
+def test_div_self_is_one():
+    scf = FiniteSimpleContinuedFraction.from_rational(Fraction(7, 5))
+    result = scf / scf
+    assert Fraction(*result.terminal_convergent) == Fraction(1)
+
+
+def test_div_result_is_fscf():
+    scf1 = FiniteSimpleContinuedFraction.from_rational(Fraction(3, 4))
+    scf2 = FiniteSimpleContinuedFraction.from_rational(Fraction(1, 2))
+    assert isinstance(scf1 / scf2, FiniteSimpleContinuedFraction)
+
+
+def test_div_unsupported_type_returns_not_implemented():
+    scf = FiniteSimpleContinuedFraction([2])
+    assert scf.__truediv__("x") is NotImplemented
+
+
+# ---------------------------------------------------------------------------
+# __eq__ and __hash__
+# ---------------------------------------------------------------------------
+
+def test_eq_same_value_different_representation():
+    # [1; 2] and [1; 1, 1] represent the same rational 3/2
+    scf1 = FiniteSimpleContinuedFraction([2], integer_part=1)
+    scf2 = FiniteSimpleContinuedFraction([1, 1], integer_part=1)
+    assert scf1 == scf2
+
+
+def test_eq_same_object():
+    scf = FiniteSimpleContinuedFraction([7], integer_part=3)
+    assert scf == scf
+
+
+def test_eq_different_values():
+    scf1 = FiniteSimpleContinuedFraction([7], integer_part=3)  # 22/7
+    scf2 = FiniteSimpleContinuedFraction([2, 3], integer_part=0)  # 3/7
+    assert scf1 != scf2
+
+
+def test_eq_with_fraction():
+    scf = FiniteSimpleContinuedFraction([7], integer_part=3)  # 22/7
+    assert scf == Fraction(22, 7)
+
+
+def test_eq_with_int():
+    scf = FiniteSimpleContinuedFraction([], integer_part=5)
+    assert scf == 5
+
+
+def test_eq_with_float():
+    scf = FiniteSimpleContinuedFraction([2], integer_part=0)  # 1/2
+    assert scf == 0.5
+
+
+def test_eq_unsupported_type_returns_not_implemented():
+    scf = FiniteSimpleContinuedFraction([2])
+    assert scf.__eq__("1/2") is NotImplemented
+
+
+def test_hash_equal_objects_same_hash():
+    scf1 = FiniteSimpleContinuedFraction([2], integer_part=1)
+    scf2 = FiniteSimpleContinuedFraction([1, 1], integer_part=1)
+    assert scf1 == scf2
+    assert hash(scf1) == hash(scf2)
+
+
+def test_hash_usable_in_set():
+    scf1 = FiniteSimpleContinuedFraction([7], integer_part=3)  # 22/7
+    scf2 = FiniteSimpleContinuedFraction([7], integer_part=3)  # 22/7 again
+    scf3 = FiniteSimpleContinuedFraction([2, 3], integer_part=0)  # 3/7
+    s = {scf1, scf2, scf3}
+    assert len(s) == 2
+
+
+def test_hash_usable_as_dict_key():
+    scf = FiniteSimpleContinuedFraction([7], integer_part=3)
+    d = {scf: "value"}
+    scf2 = FiniteSimpleContinuedFraction([7], integer_part=3)
+    assert d[scf2] == "value"
 
 
 # ---------------------------------------------------------------------------

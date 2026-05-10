@@ -401,12 +401,26 @@ class FiniteGenerator(Generator):
         if not isinstance(fg, FiniteGenerator):
             raise TypeError(f"Input 'fg' must be a FiniteGenerator, got {type(fg).__name__}.")
         
-        new_data = self._data[:at] + fg._data + self._data[at:]
-        dtype = None
-        if self.max > fg.max:
-            dtype = self.dtype
+        dtype = max((self.dtype or 'Z'), (fg.dtype or 'Z'))
+        # cast to the larger typecode to accommodate for all values in the combined sequence
+        # and avoid TypeError from array concatenation.
+        if dtype != 'Z':
+            if dtype != self.dtype:
+                self_data = array(dtype, self._data) if self._compact else self._data
+            else:            
+                self_data = self._data
+            
+            if dtype != fg.dtype:
+                fg_data = array(dtype, fg._data) if fg._compact else fg._data
+            else:
+                fg_data = fg._data
         else:
-            dtype = fg.dtype
+            self_data = list(self._data)
+            fg_data = list(fg._data)
+        
+        new_data = self_data[:at] + fg_data + self_data[at:]
+        
+        dtype = None if dtype == 'Z' else dtype
 
         return FiniteGenerator(new_data, dtype=dtype)
 
@@ -582,19 +596,64 @@ class PeriodicGenerator(Generator):
         
         new_period = self.period
         if at <= len(self.pre_period):
-            new_pre_period = self.pre_period[:at] + fg._data + self.pre_period[at:]
-            dtype = max((self.pre_period.dtype or 'A'), (fg.dtype or 'A')) # _dtypes are ordered from smallest to largest, so max gives the smallest fitting typecode for the combined sequence
-            if dtype == 'A': # if one of the sequences is None, keep dtype None
-                dtype = None
+            # dtype = max((self.pre_period.dtype or 'Z'), (fg.dtype or 'Z')) # _dtypes are ordered from smallest to largest, so max gives the smallest fitting typecode for the combined sequence
+            
+            # # cast to the larger typecode to accommodate for all values in the combined sequence 
+            # # and avoid TypeError from array concatenation.
+            # if dtype != 'Z':
+            #     if dtype != self.pre_period.dtype:
+            #         pre_period_data = array(dtype, self.pre_period._data) if self.pre_period._compact else self.pre_period._data
+            #     else:
+            #         pre_period_data = self.pre_period._data
+
+            #     if dtype != fg.dtype:
+            #         fg_data = array(dtype, fg._data) if fg._compact else fg._data
+            #     else:
+            #         fg_data = fg._data
+            # else:   
+            #     # if the combined sequence exceeds 64-bit range, we have no choice but to use 
+            #     # arbitrary-precision integers and store as tuple
+            #     pre_period_data = list(self.pre_period._data)
+            #     fg_data = list(fg._data)
+
+            # new_pre_period = pre_period_data[:at] + fg_data + pre_period_data[at:]
+            new_pre_period = self.pre_period.insert(fg, at=at)
+
         else:
             at -= len(self.pre_period)
             split = at % len(self.period)
-            new_pre_period = self.pre_period._data + self.period[:split] + fg._data + self.period[split:]
-            dtype = max((self.pre_period.dtype or 'A'), (fg.dtype or 'A'), (self.period.dtype or 'A')) 
-            if dtype == 'A':
-                dtype = None
+            # dtype = max((self.pre_period.dtype or 'Z'), (fg.dtype or 'Z'), (self.period.dtype or 'Z')) 
+
+            # # cast to the larger typecode to accommodate for all values in the combined sequence
+            # # and avoid TypeError from array concatenation.
+            # if dtype != 'Z':
+            #     if dtype != self.pre_period.dtype:
+            #         pre_period_data = array(dtype, self.pre_period._data) if self.pre_period._compact else self.pre_period._data
+            #     else:
+            #         pre_period_data = self.pre_period._data
+
+            #     if dtype != self.period.dtype:
+            #         period_data = array(dtype, self.period._data) if self.period._compact else self.period._data
+            #     else:
+            #         period_data = self.period._data
+
+            #     if dtype != fg.dtype:
+            #         fg_data = array(dtype, fg._data) if fg._compact else fg._data
+            #     else:
+            #         fg_data = fg._data
+            # else:
+            #     pre_period_data = list(self.pre_period._data)
+            #     period_data = list(self.period._data)
+            #     fg_data = list(fg._data)
+            
+            # new_pre_period = pre_period_data + period_data[:split] + fg_data + period_data[split:]
+            new_pre_period = (
+                self.pre_period
+                .insert(self.period, at=len(self.pre_period)) # insert the whole period at the end of the pre-period
+                .insert(fg, at=len(self.pre_period) + split) # insert fg at the correct position within the new pre-period
+            )
         
-        return PeriodicGenerator(period=new_period, pre_period=new_pre_period, dtypes=(self.period.dtype, dtype))
+        return PeriodicGenerator(period=new_period, pre_period=new_pre_period)
 
     @property
     def period(self) -> FiniteGenerator:

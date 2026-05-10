@@ -11,6 +11,54 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ### Added
 
+- `SimpleContinuedFraction.__repr__`: returns a detailed string including
+  `generator`, `integer_part`, and `cache_handler` fields (distinct from
+  `__str__`, which omits the cache handler).
+- `FiniteSimpleContinuedFraction.__add__`: extended to accept `float`,
+  `Fraction`, and `Decimal` in addition to the previously supported
+  `FiniteSimpleContinuedFraction` and `int`.
+- `FiniteSimpleContinuedFraction.__sub__`: new operator — delegates to
+  `self + (-other)`.
+- `FiniteSimpleContinuedFraction.__mul__`: new operator — supports
+  multiplication by another `FiniteSimpleContinuedFraction`, `int`, `float`,
+  `Fraction`, or `Decimal`; returns a new `FiniteSimpleContinuedFraction`.
+- `FiniteSimpleContinuedFraction.__truediv__`: new operator — supports
+  division by another `FiniteSimpleContinuedFraction`, `int`, `float`,
+  `Fraction`, or `Decimal`; returns a new `FiniteSimpleContinuedFraction`.
+- `FiniteSimpleContinuedFraction.__eq__`: compares by `terminal_convergent`
+  so two SCFs with different internal representations of the same rational are
+  considered equal; also handles `int`, `float`, and `Fraction`.
+- `FiniteSimpleContinuedFraction.__hash__`: hashes the `terminal_convergent`
+  tuple so equal SCFs have equal hashes and instances are usable as dict keys
+  and in sets.
+- `PeriodicSimpleContinuedFraction.__eq__`: compares by `quadratic_surd()`
+  tuple; only defined for two `PeriodicSimpleContinuedFraction` instances.
+- `PeriodicSimpleContinuedFraction.__hash__`: hashes the `quadratic_surd()`
+  tuple; consistent with `__eq__`.
+
+### Fixed
+
+- `FiniteGenerator.insert`: dtype promotion now uses a `'Z'`-sentinel
+  `max()` comparison so arrays with different compact typecodes (e.g. `'B'`
+  and `'H'`) are both recast to the wider typecode before concatenation,
+  preventing `TypeError` on mixed-dtype inserts.
+- `PeriodicGenerator.insert`: refactored to delegate dtype handling entirely
+  to `FiniteGenerator.insert` (chained calls), removing the duplicated dtype
+  logic and the `'A'`-sentinel workaround.
+- `FiniteSimpleContinuedFraction.__add__` / `__mul__` / `__truediv__`: `Decimal`
+  values are now converted to `Fraction` before accessing `.numerator` /
+  `.denominator`, fixing `AttributeError` on `Decimal` operands.
+- `FiniteSimpleContinuedFraction.__eq__`: previous implementation compared
+  `terminal_convergent` against the `(integer_part, pq_list)` tuple returned
+  by `from_rational_to_scf`, always yielding `False`; now compares
+  `Fraction(*self.terminal_convergent)` against the numeric value directly.
+
+---
+
+## [Unreleased] — prior commit
+
+### Added
+
 - `Generator.advance(n)`: returns a new generator whose *k*-th term equals the
   original's *(n+k)*-th term.  Raises `ValueError` for negative *n*; returns
   `self` for `n == 0`.  Return type follows `type(self)` so all subclasses

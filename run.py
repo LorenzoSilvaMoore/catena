@@ -522,37 +522,46 @@ if __name__ == "__main__":
     # print(f"q_uv vs real q_uv: {q_uv} vs {scf_uv.terminal_convergent[1]}")
 
 
-    phi = catena.PeriodicSimpleContinuedFraction(period=(1,), pre_period=(), integer_part=0)
+    # phi = catena.PeriodicSimpleContinuedFraction(period=(1,), pre_period=(), integer_part=0)
 
-    print(float(phi))
+    # print(float(phi))
 
-    print((-phi,))
+    # print((-phi,))
 
-    # c = Fraction(*phi.convergent(50))
-    # inv = 1-c
+    # # c = Fraction(*phi.convergent(50))
+    # # inv = 1-c
 
-    # phi_inv = catena.FiniteSimpleContinuedFraction.from_rational(inv)
-    # print(f"Inverse of phi as FSCF: {phi_inv}")
+    # # phi_inv = catena.FiniteSimpleContinuedFraction.from_rational(inv)
+    # # print(f"Inverse of phi as FSCF: {phi_inv}")
 
-    # sqrt2_frac = catena.PeriodicSimpleContinuedFraction(period=(2,), pre_period=(), integer_part=0)
+    # # sqrt2_frac = catena.PeriodicSimpleContinuedFraction(period=(2,), pre_period=(), integer_part=0)
 
-    # c2 = Fraction(*sqrt2_frac.convergent(50))
-    # inv2 = 1 - c2
-    # sqrt2_inv = catena.FiniteSimpleContinuedFraction.from_rational(inv2)
-    # print(f"Inverse of sqrt(2) as FSCF: {sqrt2_inv}")
+    # # c2 = Fraction(*sqrt2_frac.convergent(50))
+    # # inv2 = 1 - c2
+    # # sqrt2_inv = catena.FiniteSimpleContinuedFraction.from_rational(inv2)
+    # # print(f"Inverse of sqrt(2) as FSCF: {sqrt2_inv}")
 
 
-    # periodic = catena.PeriodicSimpleContinuedFraction(period=(1, 2, 3), pre_period=(4, 5), integer_part=0)
-    finite = catena.FiniteSimpleContinuedFraction(partial_quotients=(1,), integer_part=0)
-    print(finite)
-    print(-finite)
-    # inserted = periodic.generator.insert(finite.generator, 2)
-    # print(f"Inserted generator: {inserted}")
-    # print(f"First 40 partial quotients of inserted generator: {tuple(inserted(i) for i in range(40))}")
+    # # periodic = catena.PeriodicSimpleContinuedFraction(period=(1, 2, 3), pre_period=(4, 5), integer_part=0)
+    # finite = catena.FiniteSimpleContinuedFraction(partial_quotients=(1,), integer_part=0)
+    # print(finite)
+    # print(-finite)
+    # # inserted = periodic.generator.insert(finite.generator, 2)
+    # # print(f"Inserted generator: {inserted}")
+    # # print(f"First 40 partial quotients of inserted generator: {tuple(inserted(i) for i in range(40))}")
 
-    print(float(finite))
-    print(float(-finite))
+    # print(float(finite))
+    # print(float(-finite))
 
-    print(f"Negate finite by negating is value as Fraction and converting back to FSCF: {(y:=catena.FiniteSimpleContinuedFraction.from_rational(-Fraction(*finite.terminal_convergent)))}")
+    # print(f"Negate finite by negating is value as Fraction and converting back to FSCF: {(y:=catena.FiniteSimpleContinuedFraction.from_rational(-Fraction(*finite.terminal_convergent)))}")
 
-    print(f"Float of negated finite: {float(y)}")
+    # print(f"Float of negated finite: {float(y)}")
+
+    # print(float(catena.constants.e))
+
+    # for i in range(10):
+    #     print(f"{i}-th partial quotient of e: {catena.constants.e.generator(i)}")
+    seed = catena.numbers.randoms.Seed(42)
+    # random scf
+    for i in range(100):
+        r = print(catena.numbers.randoms.GaussKuzminSCF().periodic_scf(5, 4))

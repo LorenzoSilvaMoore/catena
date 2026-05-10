@@ -411,6 +411,9 @@ class SimpleContinuedFraction:
     def __str__(self):
         return f"SimpleContinuedFraction(generator={self.generator}, integer_part={self.integer_part})"
 
+    def __repr__(self):
+        return f"SimpleContinuedFraction(generator={self.generator}, integer_part={self.integer_part}, cache_handler={self.cache_handler})"
+
     def shift(self, n: int) -> 'SimpleContinuedFraction':
         """
         Returns a new SCF with ``integer_part`` shifted by ``n``, sharing the
@@ -738,18 +741,79 @@ class FiniteSimpleContinuedFraction(SimpleContinuedFraction):
         - ``scf + scf`` — computes the rational sum of both terminal
           convergents and returns a new :class:`FiniteSimpleContinuedFraction`
           equal to that sum.
+        - ``scf + rational or decimal`` — computes the rational  sum of the terminal convergent and
+            the rational (other than int), and returns a new :class:`FiniteSimpleContinuedFraction` equal to that sum.
 
         Returns :data:`NotImplemented` for unsupported types.
         """
         if isinstance(other, FiniteSimpleContinuedFraction):
-            tc1 = self.terminal_convergent
-            tc2 = other.terminal_convergent
-
-            s = mathlib.arithmetic.add_fractions(tc1, tc2)
+            s = mathlib.arithmetic.add_fractions(
+                self.terminal_convergent, 
+                other.terminal_convergent
+            )
             return FiniteSimpleContinuedFraction.from_rational(s)
-        
-        return super().__add__(other)
-    
+
+        if isinstance(other, (float, Fraction, Decimal)):
+            o = Fraction(other) if not isinstance(other, Fraction) else other
+            s = mathlib.arithmetic.uadd_fractions(*self.terminal_convergent, o.numerator, o.denominator)
+            return FiniteSimpleContinuedFraction.from_rational(s)
+            
+        return super().__add__(other) # if int, will shift the integer part; else will return NotImplemented
+
+    def __sub__(self, other):
+        return self + (-other)
+
+    def __mul__(self, other):
+        """
+        Multiplies by an integer, another :class:`FiniteSimpleContinuedFraction`, or a rational/decimal.
+
+        - ``scf * scf`` — computes the rational product of both terminal convergents and returns a new :class:`FiniteSimpleContinuedFraction`
+          equal to that product.
+        - ``scf * rational or decimal`` — computes the rational product of the terminal convergent and
+            the rational (including int), and returns a new :class:`FiniteSimpleContinuedFraction` equal to that product.
+
+        Returns :data:`NotImplemented` for unsupported types.
+        """
+        if isinstance(other, FiniteSimpleContinuedFraction):
+            s = mathlib.arithmetic.multiply_fractions(
+                self.terminal_convergent, 
+                other.terminal_convergent
+            )
+            return FiniteSimpleContinuedFraction.from_rational(s)
+
+        if isinstance(other, (int, float, Fraction, Decimal)):
+            o = other if isinstance(other, (int, Fraction)) else Fraction(other)
+            s = mathlib.arithmetic.umultiply_fractions(*self.terminal_convergent, o.numerator, o.denominator)
+            return FiniteSimpleContinuedFraction.from_rational(s)
+
+        return NotImplemented
+
+    def __truediv__(self, other):
+        """
+        Divides by an integer, another :class:`FiniteSimpleContinuedFraction`, or a rational/decimal.
+
+        - ``scf / int`` — scales the terminal convergent by the reciprocal of the integer.
+        - ``scf / scf`` — computes the rational quotient of both terminal convergents and returns a new :class:`FiniteSimpleContinuedFraction`
+          equal to that quotient.
+        - ``scf / rational or decimal`` — computes the rational quotient of the terminal convergent and
+            the rational (including int), and returns a new :class:`FiniteSimpleContinuedFraction` equal to that quotient.
+
+        Returns :data:`NotImplemented` for unsupported types.
+        """
+        if isinstance(other, FiniteSimpleContinuedFraction):
+            s = mathlib.arithmetic.sandwich_fraction(
+                self.terminal_convergent, 
+                other.terminal_convergent
+            )
+            return FiniteSimpleContinuedFraction.from_rational(s)
+
+        if isinstance(other, (int, float, Fraction, Decimal)):
+            o = other if isinstance(other, (int, Fraction)) else Fraction(other)
+            s = mathlib.arithmetic.usandwich_fraction(*self.terminal_convergent, o.numerator, o.denominator)
+            return FiniteSimpleContinuedFraction.from_rational(s)
+
+        return NotImplemented
+
     def __float__(self):
         """Returns the value of the terminal convergent as a Python ``float``."""
         tc = self.terminal_convergent
@@ -770,6 +834,34 @@ class FiniteSimpleContinuedFraction(SimpleContinuedFraction):
     def __bool__(self):
         """Returns ``False`` only when ``integer_part == 0`` and the tail is empty."""
         return self.integer_part != 0 or len(self) != 0
+
+    def __eq__(self, value):
+        """
+        Equality comparison.
+
+        - If ``value`` is a :class:`FiniteSimpleContinuedFraction`, compares
+          their terminal convergents for equality (i.e. checks if they represent the same rational number).
+        - If ``value`` is a any numeric type (e.g. ``int``, ``float``, ``Fraction``), converts it to 
+        a rational and compares to the terminal convergent.
+        - For other types, returns :data:`NotImplemented`.
+        """
+        # We are compelled to use terminal convergent for comparison, as the same rational number can have multiple SCF representations (e.g. [1; 2] = [1; 1, 1]).
+        if isinstance(value, FiniteSimpleContinuedFraction):
+            return self.terminal_convergent == value.terminal_convergent
+        
+        elif isinstance(value, (int, float, Fraction)):
+            try:
+                other_frac = value if isinstance(value, Fraction) else Fraction(value)
+                return Fraction(*self.terminal_convergent) == other_frac
+            except (ValueError, OverflowError):
+                return NotImplemented
+        else:
+            return NotImplemented
+
+    def __hash__(self):
+        """Hashes the terminal convergent, so that equal SCFs have the same hash."""
+        # array.array are unhashable, so we cannot hash the generator directly. 
+        return hash(self.terminal_convergent)
 
     def __neg__(self):
         if self.size <= 2: # For general negation, we ned a1 and a2 to be accessible, so here we do it by hand.
@@ -976,6 +1068,21 @@ class PeriodicSimpleContinuedFraction(SimpleContinuedFraction):
         P, Q, D = self.quadratic_surd()
         negated_surd = (P, -Q, D)
         return self.from_quadratic_surd(*negated_surd)
+
+    def __eq__(self, other):
+        """
+        Equality comparison.
+
+        Only defined for another :class:`PeriodicSimpleContinuedFraction`.
+        """
+        if not isinstance(other, PeriodicSimpleContinuedFraction):
+            return NotImplemented
+        
+        return self.quadratic_surd() == other.quadratic_surd()
+    
+    def __hash__(self):
+        """Hashes the quadratic surd parameters, so that equal SCFs have the same hash."""
+        return hash(self.quadratic_surd())
 
     def as_decimal(self) -> Decimal:
         """Returns the value of the SCF as a :class:`decimal.Decimal`."""

@@ -961,3 +961,59 @@ def test_constructor_periodic_generator_values():
     pscf = PeriodicSimpleContinuedFraction(period=pg, integer_part=1)
     assert isclose(float(pscf), sqrt(2), rel_tol=1e-12)
 
+
+# ===========================================================================
+# __eq__ and __hash__
+# ===========================================================================
+
+def test_eq_same_quadratic_surd():
+    sqrt2a = PeriodicSimpleContinuedFraction(period=[2], integer_part=1)
+    sqrt2b = PeriodicSimpleContinuedFraction(period=[2], integer_part=1)
+    assert sqrt2a == sqrt2b
+
+
+def test_eq_same_object():
+    sqrt2 = PeriodicSimpleContinuedFraction(period=[2], integer_part=1)
+    assert sqrt2 == sqrt2
+
+
+def test_eq_different_values():
+    sqrt2 = PeriodicSimpleContinuedFraction(period=[2], integer_part=1)
+    phi = PeriodicSimpleContinuedFraction(period=[1], integer_part=1)
+    assert sqrt2 != phi
+
+
+def test_eq_non_pscf_returns_not_implemented():
+    sqrt2 = PeriodicSimpleContinuedFraction(period=[2], integer_part=1)
+    assert sqrt2.__eq__(1.414) is NotImplemented
+    assert sqrt2.__eq__("sqrt2") is NotImplemented
+
+
+def test_hash_equal_objects_same_hash():
+    sqrt2a = PeriodicSimpleContinuedFraction(period=[2], integer_part=1)
+    sqrt2b = PeriodicSimpleContinuedFraction(period=[2], integer_part=1)
+    assert sqrt2a == sqrt2b
+    assert hash(sqrt2a) == hash(sqrt2b)
+
+
+def test_hash_different_objects_different_hash():
+    sqrt2 = PeriodicSimpleContinuedFraction(period=[2], integer_part=1)
+    phi = PeriodicSimpleContinuedFraction(period=[1], integer_part=1)
+    # hashes may collide, but almost certainly won't for such different surds
+    assert hash(sqrt2) != hash(phi)
+
+
+def test_hash_usable_in_set():
+    sqrt2a = PeriodicSimpleContinuedFraction(period=[2], integer_part=1)
+    sqrt2b = PeriodicSimpleContinuedFraction(period=[2], integer_part=1)
+    phi = PeriodicSimpleContinuedFraction(period=[1], integer_part=1)
+    s = {sqrt2a, sqrt2b, phi}
+    assert len(s) == 2
+
+
+def test_hash_usable_as_dict_key():
+    sqrt2 = PeriodicSimpleContinuedFraction(period=[2], integer_part=1)
+    d = {sqrt2: "sqrt2"}
+    sqrt2b = PeriodicSimpleContinuedFraction(period=[2], integer_part=1)
+    assert d[sqrt2b] == "sqrt2"
+
