@@ -11,6 +11,48 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ### Added
 
+- New subpackage `catena.numbers` with two modules:
+  - `catena.numbers.constants` — module-level SCF constants for standard
+    mathematical values:
+    - `e` — Euler's number as a `SimpleContinuedFraction` with the known
+      closed-form generator `a(n) = 2(k+1)` when `n ≡ 1 (mod 3)`, else `1`.
+    - `phi`, `sqrt2`, `sqrt3`, `sqrt5` — purely-periodic
+      `PeriodicSimpleContinuedFraction` instances with correct `integer_part`
+      and `period`.
+    - `metallic_mean(n)` — factory returning the *n*-th metallic mean
+      `[n; (n)]`; satisfies `x² − nx − 1 = 0`.
+  - `catena.numbers.randoms` — deterministic pseudo-random SCF generation via
+    the Gauss-Kuzmin distribution:
+    - `Seed` — stateful seed dispenser; `state` property advances via
+      SHA-256 on each access, returning the previous raw bytes; `step` tracks
+      how many times the state has been consumed; `__str__` always decodes
+      the original UTF-8 `initial_state`.
+    - `GaussKuzminSHA(seed)` — 53-bit SHA-256 uniform → Gauss-Kuzmin
+      transform in O(1); callable by index, deterministic, seed-keyed.
+    - `UniformSHAArbitrary(precision)` — multi-round SHA-256 hash chain
+      producing a `Decimal` uniform in `[0, 1)` with `precision` significant
+      digits.
+    - `GaussKuzminSHAArbitrary(seed, precision)` — arbitrary-precision
+      Gauss-Kuzmin callable built on `UniformSHAArbitrary`.
+    - `RandomSCF` (ABC) — base class exposing six factory methods:
+      `generator()`, `cached_generator()`, `finite_generator(size)`,
+      `periodic_generator(period_size, pre_period_size)`, `scf(integer_part,
+      memoised)`, `finite_scf(size, integer_part)`,
+      `periodic_scf(period_size, pre_period, integer_part)`.
+    - `GaussKuzminSCF(seed)` — `RandomSCF` backed by `GaussKuzminSHA`;
+      each `__make_callable__` call consumes one `Seed.state` so successive
+      calls on the same `Seed` produce independent callables.
+    - `GaussKuzminArbitrarySCF(precision, seed)` — same pattern, backed by
+      `GaussKuzminSHAArbitrary`.
+    - Module-level `_SEED` — global default `Seed` instance used when no
+      explicit seed is passed.
+
+---
+
+## [Unreleased] — prior commit
+
+### Added
+
 - `SimpleContinuedFraction.__repr__`: returns a detailed string including
   `generator`, `integer_part`, and `cache_handler` fields (distinct from
   `__str__`, which omits the cache handler).
