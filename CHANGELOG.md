@@ -7,99 +7,11 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ---
 
-## [Unreleased]
+## [0.4.0] — 2026-05-10
 
 ### Added
 
-- New subpackage `catena.numbers` with two modules:
-  - `catena.numbers.constants` — module-level SCF constants for standard
-    mathematical values:
-    - `e` — Euler's number as a `SimpleContinuedFraction` with the known
-      closed-form generator `a(n) = 2(k+1)` when `n ≡ 1 (mod 3)`, else `1`.
-    - `phi`, `sqrt2`, `sqrt3`, `sqrt5` — purely-periodic
-      `PeriodicSimpleContinuedFraction` instances with correct `integer_part`
-      and `period`.
-    - `metallic_mean(n)` — factory returning the *n*-th metallic mean
-      `[n; (n)]`; satisfies `x² − nx − 1 = 0`.
-  - `catena.numbers.randoms` — deterministic pseudo-random SCF generation via
-    the Gauss-Kuzmin distribution:
-    - `Seed` — stateful seed dispenser; `state` property advances via
-      SHA-256 on each access, returning the previous raw bytes; `step` tracks
-      how many times the state has been consumed; `__str__` always decodes
-      the original UTF-8 `initial_state`.
-    - `GaussKuzminSHA(seed)` — 53-bit SHA-256 uniform → Gauss-Kuzmin
-      transform in O(1); callable by index, deterministic, seed-keyed.
-    - `UniformSHAArbitrary(precision)` — multi-round SHA-256 hash chain
-      producing a `Decimal` uniform in `[0, 1)` with `precision` significant
-      digits.
-    - `GaussKuzminSHAArbitrary(seed, precision)` — arbitrary-precision
-      Gauss-Kuzmin callable built on `UniformSHAArbitrary`.
-    - `RandomSCF` (ABC) — base class exposing six factory methods:
-      `generator()`, `cached_generator()`, `finite_generator(size)`,
-      `periodic_generator(period_size, pre_period_size)`, `scf(integer_part,
-      memoised)`, `finite_scf(size, integer_part)`,
-      `periodic_scf(period_size, pre_period, integer_part)`.
-    - `GaussKuzminSCF(seed)` — `RandomSCF` backed by `GaussKuzminSHA`;
-      each `__make_callable__` call consumes one `Seed.state` so successive
-      calls on the same `Seed` produce independent callables.
-    - `GaussKuzminArbitrarySCF(precision, seed)` — same pattern, backed by
-      `GaussKuzminSHAArbitrary`.
-    - Module-level `_SEED` — global default `Seed` instance used when no
-      explicit seed is passed.
-
----
-
-## [Unreleased] — prior commit
-
-### Added
-
-- `SimpleContinuedFraction.__repr__`: returns a detailed string including
-  `generator`, `integer_part`, and `cache_handler` fields (distinct from
-  `__str__`, which omits the cache handler).
-- `FiniteSimpleContinuedFraction.__add__`: extended to accept `float`,
-  `Fraction`, and `Decimal` in addition to the previously supported
-  `FiniteSimpleContinuedFraction` and `int`.
-- `FiniteSimpleContinuedFraction.__sub__`: new operator — delegates to
-  `self + (-other)`.
-- `FiniteSimpleContinuedFraction.__mul__`: new operator — supports
-  multiplication by another `FiniteSimpleContinuedFraction`, `int`, `float`,
-  `Fraction`, or `Decimal`; returns a new `FiniteSimpleContinuedFraction`.
-- `FiniteSimpleContinuedFraction.__truediv__`: new operator — supports
-  division by another `FiniteSimpleContinuedFraction`, `int`, `float`,
-  `Fraction`, or `Decimal`; returns a new `FiniteSimpleContinuedFraction`.
-- `FiniteSimpleContinuedFraction.__eq__`: compares by `terminal_convergent`
-  so two SCFs with different internal representations of the same rational are
-  considered equal; also handles `int`, `float`, and `Fraction`.
-- `FiniteSimpleContinuedFraction.__hash__`: hashes the `terminal_convergent`
-  tuple so equal SCFs have equal hashes and instances are usable as dict keys
-  and in sets.
-- `PeriodicSimpleContinuedFraction.__eq__`: compares by `quadratic_surd()`
-  tuple; only defined for two `PeriodicSimpleContinuedFraction` instances.
-- `PeriodicSimpleContinuedFraction.__hash__`: hashes the `quadratic_surd()`
-  tuple; consistent with `__eq__`.
-
-### Fixed
-
-- `FiniteGenerator.insert`: dtype promotion now uses a `'Z'`-sentinel
-  `max()` comparison so arrays with different compact typecodes (e.g. `'B'`
-  and `'H'`) are both recast to the wider typecode before concatenation,
-  preventing `TypeError` on mixed-dtype inserts.
-- `PeriodicGenerator.insert`: refactored to delegate dtype handling entirely
-  to `FiniteGenerator.insert` (chained calls), removing the duplicated dtype
-  logic and the `'A'`-sentinel workaround.
-- `FiniteSimpleContinuedFraction.__add__` / `__mul__` / `__truediv__`: `Decimal`
-  values are now converted to `Fraction` before accessing `.numerator` /
-  `.denominator`, fixing `AttributeError` on `Decimal` operands.
-- `FiniteSimpleContinuedFraction.__eq__`: previous implementation compared
-  `terminal_convergent` against the `(integer_part, pq_list)` tuple returned
-  by `from_rational_to_scf`, always yielding `False`; now compares
-  `Fraction(*self.terminal_convergent)` against the numeric value directly.
-
----
-
-## [Unreleased] — prior commit
-
-### Added
+#### Generator layer (`catena.generators`)
 
 - `Generator.advance(n)`: returns a new generator whose *k*-th term equals the
   original's *(n+k)*-th term.  Raises `ValueError` for negative *n*; returns
@@ -126,28 +38,123 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 - `PeriodicGenerator.insert(fg, at)`: inserts into the pre-period when
   `at ≤ len(pre_period)`; otherwise folds the relevant portion of the period
   into an extended pre-period while keeping the original period intact.
+
+#### SCF arithmetic and protocol (`catena.catena`)
+
+- `SimpleContinuedFraction.__repr__`: returns a detailed string including
+  `generator`, `integer_part`, and `cache_handler` fields (distinct from
+  `__str__`, which omits the cache handler).
 - `SimpleContinuedFraction.__neg__`: returns the additive inverse as a new SCF
   of the same type, using `advance` and `prepend`; two branches handle *a₁ > 1*
   and *a₁ = 1* separately.
 - `FiniteSimpleContinuedFraction.__neg__`: delegates to `from_rational` for
-  `size ≤ 2` (avoids accessing a potentially absent *a₂*); calls `super().__neg__()`
-  for larger SCFs.
-- `PeriodicSimpleContinuedFraction.__neg__`: trivial negation via the quadratic
-  surd representation — maps *(P + √D) / Q* to *(P + √D) / (−Q)*.
+  `size ≤ 2`; calls `super().__neg__()` for larger SCFs.
+- `FiniteSimpleContinuedFraction.__add__`: extended to accept `float`,
+  `Fraction`, and `Decimal` in addition to `FiniteSimpleContinuedFraction`
+  and `int`.
+- `FiniteSimpleContinuedFraction.__sub__`: new operator — delegates to
+  `self + (-other)`.
+- `FiniteSimpleContinuedFraction.__mul__`: new operator — supports
+  multiplication by another `FiniteSimpleContinuedFraction`, `int`, `float`,
+  `Fraction`, or `Decimal`; returns a new `FiniteSimpleContinuedFraction`.
+- `FiniteSimpleContinuedFraction.__truediv__`: new operator — same type
+  support as `__mul__`.
+- `FiniteSimpleContinuedFraction.__eq__`: compares by `terminal_convergent`
+  so two SCFs representing the same rational are equal regardless of internal
+  form; also handles `int`, `float`, and `Fraction`.
+- `FiniteSimpleContinuedFraction.__hash__`: hashes the `terminal_convergent`
+  tuple; instances are usable as dict keys and in sets.
+- `PeriodicSimpleContinuedFraction.__neg__`: negates via the quadratic surd
+  representation — maps *(P + √D) / Q* to *(P + √D) / (−Q)*.
+- `PeriodicSimpleContinuedFraction.__eq__`: compares by `quadratic_surd()`
+  tuple; only defined between two `PeriodicSimpleContinuedFraction` instances.
+- `PeriodicSimpleContinuedFraction.__hash__`: hashes the `quadratic_surd()`
+  tuple; consistent with `__eq__`.
 - `PeriodicSimpleContinuedFraction.__init__`: accepts a `PeriodicGenerator`
   instance directly as the `period` argument, bypassing re-construction.
+
+#### New subpackage: `catena.numbers`
+
+- `catena.numbers.constants` — module-level SCF instances for standard
+  mathematical constants:
+  - `e` — Euler's number as a `SimpleContinuedFraction` with the closed-form
+    generator `a(n) = 2(k+1)` when `n = 3k+1`, else `a(n) = 1`.
+  - `phi`, `sqrt2`, `sqrt3`, `sqrt5` — purely-periodic
+    `PeriodicSimpleContinuedFraction` instances with exact `integer_part` and
+    `period`.
+  - `metallic_mean(n)` — factory returning the *n*-th metallic mean
+    `[n; (n)]` as a `PeriodicSimpleContinuedFraction`; satisfies
+    `x² − nx − 1 = 0`.
+- `catena.numbers.randoms` — deterministic pseudo-random SCF generation via
+  the Gauss-Kuzmin distribution:
+  - `Seed` — stateful SHA-256 chain seed dispenser; each access to `state`
+    returns the current bytes and advances to `sha256(state)`; `step` counts
+    how many times the chain has been consumed; `__str__` decodes the original
+    UTF-8 `initial_state`.
+  - `GaussKuzminSHA(seed)` — 53-bit SHA-256 uniform → Gauss-Kuzmin integer
+    via `⌊1/(2ᵘ − 1)⌋`; O(1) per call, deterministic by index and seed.
+  - `UniformSHAArbitrary(precision)` — multi-round SHA-256 hash chain
+    producing a `Decimal` uniform in `[0, 1)` with the requested number of
+    significant digits.
+  - `GaussKuzminSHAArbitrary(seed, precision)` — arbitrary-precision
+    Gauss-Kuzmin callable built on `UniformSHAArbitrary`.
+  - `RandomSCF` (ABC) — abstract base defining `__make_callable__()`; exposes
+    six factory methods: `generator()`, `cached_generator()`,
+    `finite_generator(size)`, `periodic_generator(period_size, pre_period_size)`,
+    `scf(integer_part, memoised)`, `finite_scf(size, integer_part)`,
+    `periodic_scf(period_size, pre_period, integer_part)`.
+  - `GaussKuzminSCF(seed)` — `RandomSCF` backed by `GaussKuzminSHA`; each
+    `__make_callable__` call consumes one `Seed.state` step so successive
+    callables from the same `Seed` are independent.
+  - `GaussKuzminArbitrarySCF(precision, seed)` — same pattern, backed by
+    `GaussKuzminSHAArbitrary`; `precision` defaults to 50.
+  - Module-level `_SEED` — global default `Seed` used when no explicit seed
+    is passed.
 
 ### Removed
 
 - `Generator.cached` and `CachedGenerator.cached` attributes (use
-  `isinstance(g, CachedGenerator)` to test for caching instead).
+  `isinstance(g, CachedGenerator)` instead).
 
 ### Fixed
 
-- `CachedGenerator`: passing a `CachedGenerator` instance to the constructor
-  now returns the same object (identity short-circuit via `__new__` +
-  `__init__` early-return guard) rather than wrapping it in a second layer.
+- `CachedGenerator`: passing a `CachedGenerator` to the constructor now
+  returns the same object (identity short-circuit via `__new__` + `__init__`
+  guard) rather than wrapping it in a second layer.
+- `FiniteGenerator.insert`: dtype promotion now uses a `'Z'`-sentinel `max()`
+  so arrays with different compact typecodes (e.g. `'B'` and `'H'`) are both
+  recast to the wider typecode before concatenation, preventing `TypeError`.
+- `PeriodicGenerator.insert`: refactored to delegate dtype handling entirely
+  to `FiniteGenerator.insert`, removing the duplicated logic.
+- `FiniteSimpleContinuedFraction.__add__` / `__mul__` / `__truediv__`:
+  `Decimal` values are now converted to `Fraction` before accessing
+  `.numerator` / `.denominator`, fixing `AttributeError` on `Decimal` operands.
+- `FiniteSimpleContinuedFraction.__eq__`: now compares
+  `Fraction(*self.terminal_convergent)` against the numeric value directly,
+  fixing a bug where comparison always returned `False`.
 - Removed stray debug `print` from `mathlib/convert.py`.
+
+### Tests
+
+- 248 new tests (799 total, all passing on Python 3.12+).
+- `testing/test_generators.py` — new sections for `advance`, `insert`, and
+  `prepend` on all four generator types, including `copy_cache` variants for
+  `CachedGenerator`.
+- `testing/test_scf.py` — new sections for `__repr__` and `__neg__`.
+- `testing/test_finite_scf.py` — new sections for `__neg__`, extended `__add__`,
+  `__sub__`, `__mul__`, `__truediv__`, `__eq__`, and `__hash__`.
+- `testing/test_periodic_scf.py` — new sections for `__neg__`, `__eq__`, and
+  `__hash__`.
+- `testing/test_numbers_constants.py` (new, 127 tests) — shared behaviour
+  parametrized over all four periodic constants; per-constant special-case
+  classes (Fibonacci recurrence for φ, Pell equation for √2); `TestE` with
+  parametrized body-value checks; `TestMetallicMean` parametrized over
+  *n* = 1…5 including the algebraic identity `x² − nx − 1 = 0`.
+- `testing/test_numbers_randoms.py` (new, 121 tests) — `TestSeed*`;
+  `TestGaussKuzminSharedBehaviour` parametrized over both callable types;
+  pinned output values and distribution-skew checks; `TestUniformSHAArbitrary`;
+  `TestRandomSCFFactoryMethods` parametrized over `GaussKuzminSCF` and
+  `GaussKuzminArbitrarySCF` covering all six factory methods.
 
 ---
 
