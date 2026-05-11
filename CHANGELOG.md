@@ -11,6 +11,49 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ### Added
 
+- `SimpleContinuedFraction.inverse()`: new branch for negative `integer_part`
+  — computes `−(−self).inverse()` instead of raising `ValueError`, so the
+  full integer line is now supported.
+
+### Changed
+
+- `SimpleContinuedFraction.inverse()`: the `integer_part == 0` and
+  `integer_part > 0` branches now use `generator.advance(1)` and
+  `generator.prepend(FiniteGenerator([...]))` respectively, replacing the
+  previous ad-hoc lambdas; the result composes correctly with the generator
+  manipulation API and produces meaningful `__str__` output.
+- `Generator.__str__`: simplified format from `Generator(generator=name)` to
+  `Generator(name)`.
+- `CachedGenerator.__str__`: simplified format from
+  `CachedGenerator(generator=name, cache_size=N)` to
+  `CachedGenerator(name, cache_size=N)`.
+- `Generator._generator_name`: captured at construction via
+  `getattr(generator, '__name__', repr(generator))`; makes the string
+  representation robust for closures and lambdas that have no `.func`
+  attribute.
+
+### Fixed
+
+- `RandomSCF.scf(memoised=...)`: guard tightened from `if memoised` to
+  `if memoised is True`; truthy non-bool values no longer accidentally
+  trigger the `CachedGenerator` path.
+
+### Tests
+
+- `testing/test_scf.py`: 6 new tests for `inverse()` with negative
+  `integer_part` — does not raise, returns `SimpleContinuedFraction`,
+  reciprocal identity, known value against a hand-computed result, and
+  parametrized over several negative values.
+- `testing/test_generators.py`: 8 new tests for `Generator.__str__` and
+  `CachedGenerator.__str__` — exact format strings, function-name inclusion,
+  cache-size reflection, and lambda handling.
+
+---
+
+## [0.4.0] — 2026-05-10
+
+### Added
+
 - New subpackage `catena.numbers` with two modules:
   - `catena.numbers.constants` — module-level SCF constants for standard
     mathematical values:

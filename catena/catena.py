@@ -617,12 +617,12 @@ class SimpleContinuedFraction:
         
         if self.integer_part == 0:
             new_integer_part = self.generator(0)
-            new_generator = lambda n: self.generator(n + 1)
+            new_generator = self.generator.advance(1) #lambda n: self.generator(n + 1)
         elif self.integer_part > 0:
             new_integer_part = 0
-            new_generator = lambda n: self.generator(n - 1) if n > 0 else self.integer_part
+            new_generator = self.generator.prepend(FiniteGenerator([self.integer_part])) #lambda n: self.generator(n - 1) if n > 0 else self.integer_part
         else:
-            raise ValueError("Negative integer part is not supported for inversion")
+            return -(-self).inverse() # Handle negative integer part by negating, inverting, and negating again to avoid complications with prepending negative integers.
 
         self._inverse = SimpleContinuedFraction(generator=new_generator, integer_part=new_integer_part)
         self._inverse._inverse = self   # Cache the inverse of the inverse as the original SCF

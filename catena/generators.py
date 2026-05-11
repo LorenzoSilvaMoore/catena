@@ -62,6 +62,7 @@ class Generator(Callable):
             raise TypeError(f"Generator requires a callable, got {type(generator).__name__}.")
 
         self.generator = generator
+        self._generator_name = getattr(generator, '__name__', repr(generator))
 
     def advance(self, n: int) -> 'Generator':
         """
@@ -165,7 +166,7 @@ class Generator(Callable):
         return call_result
     
     def __str__(self) -> str:
-        return f"Generator(generator={self.generator.__name__})"
+        return f"Generator({self._generator_name})"
     
     def __new__(cls, generator, *args, **kwargs):
         """
@@ -277,7 +278,7 @@ class CachedGenerator(Generator):
         self._cache_handler.reset_cache()
 
     def __str__(self) -> str:
-        return f"CachedGenerator(generator={self.generator.func.__name__}, cache_size={len(self.cache)})"
+        return f"CachedGenerator({self._generator_name}, cache_size={len(self.cache)})"
     
     def __new__(cls, generator, *args, **kwargs):
         if isinstance(generator, cls):

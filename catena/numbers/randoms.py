@@ -147,7 +147,7 @@ class RandomSCF(ABC):
         return PeriodicGenerator(period, pre_period)
     
     def scf(self, integer_part: int = 0, memoised=False) -> SimpleContinuedFraction:
-        if memoised:
+        if memoised is True:
             return SimpleContinuedFraction(self.cached_generator(), integer_part=integer_part)
         
         return SimpleContinuedFraction(self.generator(), integer_part=integer_part)

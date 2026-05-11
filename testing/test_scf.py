@@ -660,6 +660,63 @@ def test_inverse_write_once_protection():
         scf._inverse = None
 
 
+# ---------------------------------------------------------------------------
+# inverse() — negative integer part (new in 0.4.0)
+#
+# Previously raised ValueError; now computes via -(-self).inverse().
+# ---------------------------------------------------------------------------
+
+def test_inverse_negative_integer_part_does_not_raise():
+    """inverse() with a negative integer part must not raise."""
+    scf = SimpleContinuedFraction(twos, integer_part=-1)
+    inv = scf.inverse()  # must not raise
+    assert inv is not None
+
+
+def test_inverse_negative_integer_part_returns_scf():
+    scf = SimpleContinuedFraction(twos, integer_part=-1)
+    assert isinstance(scf.inverse(), SimpleContinuedFraction)
+
+
+def test_inverse_negative_integer_part_value_is_reciprocal():
+    """float(scf) * float(scf.inverse()) ≈ 1 for negative integer_part."""
+    from math import isclose
+    scf = SimpleContinuedFraction(twos, integer_part=-1)
+    inv = scf.inverse()
+    p,  q  = scf.convergent(40)
+    pi, qi = inv.convergent(40)
+    assert isclose((p / q) * (pi / qi), 1.0, rel_tol=1e-9)
+
+
+def test_inverse_negative_integer_part_value_known():
+    """[-2; 1, 1, 1, …] = φ - 2 ≈ -0.382; its inverse ≈ -2.618."""
+    from math import isclose, sqrt
+    # [−2; 1,1,1,…] = −2 + 1/φ = −2 + (φ−1) = φ−3? No:
+    # φ = [1; 1,1,1,…] ≈ 1.618, 1/φ = φ-1 ≈ 0.618
+    # [−2; 1,1,1,…] = −2 + 1/φ ≈ −2 + 0.618 = −1.382
+    # 1/(−1.382) ≈ −0.7236
+    scf = SimpleContinuedFraction(ones, integer_part=-2)
+    inv = scf.inverse()
+    phi = (1 + sqrt(5)) / 2
+    expected_scf   = -2 + 1 / phi
+    expected_inv   = 1 / expected_scf
+    p,  q  = scf.convergent(40)
+    pi, qi = inv.convergent(40)
+    assert isclose(p / q,   expected_scf, rel_tol=1e-9)
+    assert isclose(pi / qi, expected_inv, rel_tol=1e-9)
+
+
+@pytest.mark.parametrize("a0", [-1, -2, -3, -5])
+def test_inverse_negative_integer_part_parametrized(a0):
+    """Reciprocal identity holds for several negative integer parts."""
+    from math import isclose
+    scf = SimpleContinuedFraction(twos, integer_part=a0)
+    inv = scf.inverse()
+    p,  q  = scf.convergent(40)
+    pi, qi = inv.convergent(40)
+    assert isclose((p / q) * (pi / qi), 1.0, rel_tol=1e-9)
+
+
 def test_inverse_convergents_are_reciprocals():
     """For [1; 2, 2, 2, …] (√2), the n-th convergent of inverse ≈ 1/√2."""
     scf = SimpleContinuedFraction(twos, integer_part=1)

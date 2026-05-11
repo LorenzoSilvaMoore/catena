@@ -561,7 +561,10 @@ if __name__ == "__main__":
 
     # for i in range(10):
     #     print(f"{i}-th partial quotient of e: {catena.constants.e.generator(i)}")
-    seed = catena.numbers.randoms.Seed(42)
-    # random scf
-    for i in range(100):
-        r = print(catena.numbers.randoms.GaussKuzminSCF().periodic_scf(5, 4))
+    
+    r = catena.numbers.randoms.GaussKuzminSCF().scf(5, 4)
+    n = -r
+    print(float(r), r)
+    print(float(n), n)
+    print(float(n.inverse()), n.inverse())
+    print(1/float(n))

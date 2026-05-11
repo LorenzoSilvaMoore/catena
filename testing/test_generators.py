@@ -889,6 +889,57 @@ def test_repr_contains_periodic_generator():
 
 
 # ---------------------------------------------------------------------------
+# Generator / CachedGenerator __str__ (format updated in 0.4.0)
+# ---------------------------------------------------------------------------
+
+def test_generator_str_contains_function_name():
+    def my_gen(n): return n + 1
+    g = Generator(my_gen)
+    assert "my_gen" in str(g)
+
+
+def test_generator_str_format():
+    def my_gen(n): return n + 1
+    g = Generator(my_gen)
+    assert str(g) == "Generator(my_gen)"
+
+
+def test_generator_str_lambda_does_not_raise():
+    """Lambdas have a __name__ so str() must not raise."""
+    g = Generator(lambda n: n + 1)
+    s = str(g)  # must not raise
+    assert "Generator" in s
+
+
+def test_cached_generator_str_contains_function_name():
+    def my_gen(n): return n + 1
+    cg = CachedGenerator(my_gen)
+    assert "my_gen" in str(cg)
+
+
+def test_cached_generator_str_contains_cache_size():
+    def my_gen(n): return n + 1
+    cg = CachedGenerator(my_gen)
+    for i in range(3):
+        cg(i)
+    assert "cache_size=3" in str(cg)
+
+
+def test_cached_generator_str_format():
+    def my_gen(n): return n + 1
+    cg = CachedGenerator(my_gen)
+    for i in range(5):
+        cg(i)
+    assert str(cg) == "CachedGenerator(my_gen, cache_size=5)"
+
+
+def test_cached_generator_str_empty_cache():
+    def my_gen(n): return n + 1
+    cg = CachedGenerator(my_gen)
+    assert str(cg) == "CachedGenerator(my_gen, cache_size=0)"
+
+
+# ---------------------------------------------------------------------------
 # cycle_quadratic_coefficients – hard-coded expected values
 #
 # Formula (integer_part=0 SCF from period [a₁,…,aₖ]):
