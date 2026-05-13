@@ -44,7 +44,14 @@ $g$ is allowed to have a finite domain, in which case the resulting SCF is finit
   constructor allows non-canonical inputs for flexibility.
 \end{remark}
 
-\subsection{The Euclidean Algorithm as SCF Expansion}
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{The Euclidean Algorithm as SCF Expansion\texorpdfstring{\protect\footnotemark}{}}
+
+\footnotetext{The following description of the Euclidean algorithm is not a formal proof, but 
+rather an explanation of how the algorithm corresponds to the SCF expansion process. For the
+representations of numbers as SCFs see \citeauthor{khinchin1964}, \S 2, \cite{khinchin1964}. 
+For a breakdown of the Euclidean algorithm into SCF steps see \citeauthor{parrish2021}, \S 2.2, \cite{parrish2021}.}
+% ─────────────────────────────────────────────────────────────────────────────
 
 The SCF coefficients of $p/q$ are precisely the successive quotients produced by the
 Euclidean algorithm.
@@ -247,11 +254,11 @@ form.
 Note the design difference from the parent class:
 \texttt{SimpleContinuedFraction.inverse()} manipulates the generator directly
 (prepending $a_0$ or shifting the index), which is appropriate when the
-generator is infinite.  For a finite SCF it is simpler to invert the
-terminal fraction $p/q \mapsto q/p$ and run the Euclidean algorithm again.
+generator is infinite.  For a finite SCF it is preferable to invert the
+terminal fraction $p/q \mapsto q/p$ and run the Euclidean algorithm again. 
 \catena chooses this second path: \texttt{FiniteSimpleContinuedFraction.inverse()}
 calls \texttt{from\_rational\_to\_scf} on the swapped pair $(q, p)$, so the
-result is always in canonical form.  The inverse is memoised (write-once
+result is always in canonical form. The inverse is memoised (write-once
 cache) so that calling \texttt{inverse()} twice returns the original object.
 
 \begin{catenadef}[\texttt{FiniteSimpleContinuedFraction.inverse}]
@@ -265,3 +272,157 @@ zero = FiniteSimpleContinuedFraction([], integer_part=0)
 zero.inverse()   # raises ZeroDivisionError
 \end{lstlisting}
 \end{catenadef}
+
+\subsection{Full Arithmetic on Finite SCFs}
+
+Since every finite SCF represents a rational number exactly (via
+\texttt{terminal\_convergent}), the full field arithmetic of $\mathbb{Q}$ is
+available: addition, subtraction, multiplication, and division all reduce to
+the corresponding operation on the terminal fractions followed by a call to
+\texttt{from\_rational}.  The results are always canonical finite SCFs.
+
+\begin{remark}[Arithmetic strategy: terminal convergent first]
+  All four binary operations follow the same pattern:
+  \begin{enumerate}
+    \item Extract the terminal convergents $(p_x, q_x)$ and $(p_y, q_y)$.
+    \item Perform the rational arithmetic exactly in $\mathbb{Z}$.
+    \item Re-expand the result via \texttt{from\_rational} (Euclidean
+          algorithm), producing a canonical finite SCF.
+  \end{enumerate}
+  This contrasts with the infinite case, where arithmetic must be implemented
+  at the level of generators (e.g.\ \texttt{shift}, \texttt{prepend},
+  \texttt{advance}) because there is no terminal frame to extract.
+\end{remark}
+
+The following table summarises which argument types are accepted by each
+binary operator.  The result is always a
+\texttt{FiniteSimpleContinuedFraction} (or \texttt{NotImplemented} for
+unsupported types).
+
+\begin{center}
+\begin{tabular}{lcccc}
+  \toprule
+  Operand type & \texttt{+} & \texttt{-} & \texttt{*} & \texttt{/} \\
+  \midrule
+  \texttt{FiniteSimpleContinuedFraction} & \checkmark & \checkmark & \checkmark & \checkmark \\
+  \texttt{int}   & $\dagger$ & \checkmark & \checkmark & \checkmark \\
+  \texttt{float} & \checkmark & \checkmark & \checkmark & \checkmark \\
+  \texttt{Fraction} & \checkmark & \checkmark & \checkmark & \checkmark \\
+  \texttt{Decimal} & \checkmark & \checkmark & \checkmark & \checkmark \\
+  \bottomrule
+\end{tabular}
+\end{center}
+$\dagger$ \texttt{scf + int} is inherited from \texttt{SimpleContinuedFraction}
+and shifts only the integer part $a_0$, leaving the body generator
+unchanged (see Integer Translation in the previous section).  All other
+combinations compute the rational result and re-expand via
+\texttt{from\_rational}.  For \texttt{float} and \texttt{Decimal} arguments
+the value is first converted to an exact \texttt{Fraction} before the
+rational arithmetic; any rounding already present in the float is preserved
+(not corrected).
+
+\begin{proposition}[Subtraction of Finite SCFs]\label{prop:fscf-sub}
+  Let $x, y$ be finite SCFs.  Then
+  \[
+    x - y = x + (-y),
+  \]
+  where $-y$ is the additive inverse of $y$ (see below). 
+  \texttt{\_\_sub\_\_} delegates entirely to \texttt{\_\_add\_\_} after negating the
+  right-hand operand, so the same type dispatch applies.
+\end{proposition}
+
+\begin{proposition}[Multiplication of Finite SCFs]\label{prop:fscf-mul}
+  Let $x$ and $y$ be finite SCFs with terminal convergents $p_x/q_x$ and
+  $p_y/q_y$.  Then
+  \[
+    x \cdot y
+      = \left[\frac{p_x\, p_y}{q_x\, q_y}\right]_{\!\mathrm{SCF}}.
+  \]
+\end{proposition}
+
+\begin{catenadef}[\texttt{FiniteSimpleContinuedFraction.\_\_mul\_\_}]
+\begin{lstlisting}[style=python]
+x = FiniteSimpleContinuedFraction.from_rational((3, 4))   # 3/4
+y = FiniteSimpleContinuedFraction.from_rational((2, 3))   # 2/3
+z = x * y   # 3/4 * 2/3 = 1/2
+z.terminal_convergent   # (1, 2)
+
+# Scalar multiplication
+x * 3     # 3/4 * 3 = 9/4; terminal_convergent = (9, 4)
+x * 0.5   # 3/4 * 1/2 = 3/8 (float converted to Fraction first)
+\end{lstlisting}
+\end{catenadef}
+
+\begin{proposition}[Division of Finite SCFs]\label{prop:fscf-div}
+  Let $x$ and $y$ be finite SCFs with terminal convergents $p_x/q_x$ and
+  $p_y/q_y$, with $p_y \neq 0$.  Then
+  \[
+    \frac{x}{y}
+      = \left[\frac{p_x\, q_y}{q_x\, p_y}\right]_{\!\mathrm{SCF}}.
+  \]
+  Note that $x / y = x \cdot (1/y)$, but \catena avoids constructing the
+  intermediate inverse SCF; it operates directly on the four integers
+  $(p_x, q_x, p_y, q_y)$.
+\end{proposition}
+
+\begin{catenadef}[\texttt{FiniteSimpleContinuedFraction.\_\_truediv\_\_}]
+\begin{lstlisting}[style=python]
+x = FiniteSimpleContinuedFraction.from_rational((3, 4))   # 3/4
+y = FiniteSimpleContinuedFraction.from_rational((2, 3))   # 2/3
+z = x / y   # (3/4) / (2/3) = 9/8
+z.terminal_convergent   # (9, 8)
+
+x / 2     # 3/4 / 2 = 3/8
+\end{lstlisting}
+\end{catenadef}
+
+\begin{proposition}[Negation of a Finite SCF]\label{prop:fscf-neg}
+  Let $x = [a_0;\, a_1, \ldots, a_k]$ be a finite SCF with terminal
+  convergent $p/q$.  Then
+  \[
+    -x = \left[\frac{-p}{q}\right]_{\!\mathrm{SCF}}.
+  \]
+  For $k \leq 2$, the general negation formula from
+  Proposition~\ref{prop:neg} requires accessing $a_1$ and $a_2$, which may
+  not both exist.  \catena therefore handles this case separately by
+  delegating directly to \texttt{from\_rational(-Fraction(p, q))}, and
+  falls back to the generator-level formula for $k \geq 3$.
+\end{proposition}
+
+\begin{catenadef}[\texttt{FiniteSimpleContinuedFraction.\_\_neg\_\_}]
+\begin{lstlisting}[style=python]
+x = FiniteSimpleContinuedFraction.from_rational((3, 4))   # [0; 1, 3] = 3/4
+(-x).terminal_convergent   # (-3, 4)
+
+y = FiniteSimpleContinuedFraction.from_rational((355, 113))  # [3; 7, 16]
+(-y).terminal_convergent   # (-355, 113)
+\end{lstlisting}
+\end{catenadef}
+
+\begin{remark}[Comparison with \texttt{SimpleContinuedFraction} arithmetic]
+  The table below summarises the key design differences between arithmetic on
+  finite and infinite SCFs.
+
+  \begin{center}
+  \begin{tabular}{lll}
+    \toprule
+    Operation & \texttt{SimpleContinuedFraction} & \texttt{FiniteSimpleContinuedFraction} \\
+    \midrule
+    \texttt{+\,int}   & shifts $a_0$, $O(1)$, no re-expansion & same (inherited) \\
+    \texttt{+\,scf}   & not defined & terminal fracs $\to$ \texttt{from\_rational} \\
+    \texttt{-}        & not defined & delegates to \texttt{+(-other)} \\
+    \texttt{*}        & not defined & terminal fracs $\to$ \texttt{from\_rational} \\
+    \texttt{/}        & not defined & terminal fracs $\to$ \texttt{from\_rational} \\
+    \texttt{inverse}  & generator-level prepend/shift & swap $(p,q)\to(q,p)$, re-expand \\
+    \texttt{neg}      & generator-level case split & \texttt{from\_rational} for $k\leq 2$, \\
+                      &                            & generator formula for $k\geq 3$ \\
+    \texttt{float}    & \texttt{convergent(50)} heuristic & exact \texttt{terminal[0]/terminal[1]} \\
+    \bottomrule
+  \end{tabular}
+  \end{center}
+
+  The unifying principle is that finite SCFs are rational numbers, so all
+  arithmetic is exact and the canonical form is always recoverable via the
+  Euclidean algorithm.  Infinite SCFs, by contrast, lack a terminal frame
+  and must operate structurally at the generator level.
+\end{remark}

@@ -1,5 +1,7 @@
 % ─────────────────────────────────────────────────────────────────────────────
-\section{Simple Continued Fractions\texorpdfstring{\protect\footnotemark}{}}\footnotetext{As with all the other sections, the following is not meant to be an exhaustive 
+\section{Simple Continued Fractions\texorpdfstring{\protect\footnotemark}{}}
+
+\footnotetext{As with all the other sections, the following is not meant to be an exhaustive 
 treatment of the topic, but rather a sketch of the main results and algorithms related to SCFs that are relevant to \catena. 
 For a more comprehensive treatment, see \cite{khinchin1964} and \cite{rockett1992}.
 }
@@ -475,7 +477,22 @@ float(phi) # approximately 1.618033988749895
   (see, e.g., \cite{khinchin1964}, Theorem 5).
 \end{remark}
 
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Arithmetic and Algebraic Manipulations of SCFs}
+% ─────────────────────────────────────────────────────────────────────────────
+
+In full generality, arithmetic operations on SCFs are nontrivial, since the
+generators of the resulting SCFs may not admit closed-form expressions. However, there are some 
+special cases where we can derive explicit formulas for the generators of the resulting SCFs, 
+allowing us to perform certain operations efficiently. We present two such cases: the multiplicative 
+inverse and the additive inverse.\footnote{
+    There is a way to define basic arithmetic for SCFs, proposed by Gosper \cite{gosper1972}, but
+    the implementation is a tad more cumbersome and there are also some caveats. Therefore, implementing
+    the Gosper arithmetic for continued fractions is deferred to a later version of \catena.
+}
+
 \begin{proposition}[SCF of the Multiplicative Inverse]
+    \label{prop:inverse}
   Let $x = (a_0, g)$ be an SCF with $x > 0$.
   \begin{enumerate}
     \item If $a_0 = 0$: $x = [0;\, a_1, a_2, \ldots]$ with $a_1 \geq 1$, so
@@ -489,13 +506,21 @@ float(phi) # approximately 1.618033988749895
 
   The condition $x > 0$ (equivalently $a_0 \geq 0$) is necessary.  If
   $a_0 < 0$ then $x < 0$, so $1/x < 0$ and its SCF has a negative integer
-  part; this cannot be recovered by the simple generator-prepend trick above,
+  part; this cannot be recovered by the simple generator-prepend transformation above,
   which would place a negative value in a body slot (violating $g: I \to \Zp$).
   The result is computed by \texttt{SimpleContinuedFraction.inverse}, which
   stores it in a write-once \texttt{\_inverse} attribute and sets the
   inverse's own \texttt{\_inverse} back to \texttt{self}, making
   \texttt{inverse} an involution on cached pairs.
 \end{proposition}
+
+\begin{remark}
+    Reciprocity of the inverse operation is a consequence of the fact that the SCF of $1/x$ is 
+    constructed by a simple transformation of the generator of $x$, and this transformation is 
+    designed to be reversible.  The caching mechanism ensures that once the inverse is computed, 
+    it can be retrieved in constant time on subsequent calls, and that the involution property 
+    holds without redundant computation.
+\end{remark}
 
 \begin{catenadef}[\texttt{SimpleContinuedFraction.inverse}]
 \begin{lstlisting}[style=python]
@@ -508,10 +533,101 @@ inv_phi.inverse() is phi  # True  (involution: write-once _inverse points back t
 # a_0 = 0 case:
 tail_phi = phi.tail()          # [0; 1, 1, 1, ...]
 tail_phi.inverse().integer_part  # 1  (= a_1; inverse is phi itself)
+\end{lstlisting}
+\end{catenadef}
 
-# a_0 < 0: not supported
-neg = SimpleContinuedFraction(lambda n: 1, integer_part=-1)
-neg.inverse()  # raises ValueError
+\begin{remark}
+    In Proposition \ref{prop:inverse}, we saw that the SCF of the multiplicative inverse of a 
+    positive SCF can be obtained almost for free. By contrast, the negative case is more involved, 
+    and there is no simple generator transformation that yields the SCF of $1/x$ when $x < 0$. However,
+    if we could define the additive inverse of an SCF ($-x$ for any $x$), then we could compute 
+    the multiplicative inverse of a negative SCF by first negating it and then applying the positive case.
+    In short, we would have $1/x = -(1/(-x))$, and since $-x > 0$, we could apply the positive case 
+    to compute $1/(-x)$, and then negate the result to get $1/x$.
+\end{remark}
+
+\begin{proposition}[SCF of the Additive Inverse]
+    \label{prop:neg}
+  Let $x = (a_0, g)$ be an SCF with $g \neq \varnothing$, and let $a_1 := g(0)$.
+  Then
+  \[
+    -x = (-a_0 - 1,\; g^*),
+  \]
+  where $g^* \colon J \to \Zp$ is the generator defined by
+  \[
+    g^* =
+    \begin{cases}
+      \bigl(1,\; a_1 - 1,\; g(1),\; g(2),\; \ldots\bigr) & \text{if } a_1 > 1, \\[4pt]
+      \bigl(g(1) + 1,\; g(2),\; g(3),\; \ldots\bigr)     & \text{if } a_1 = 1.
+    \end{cases}
+  \]
+\end{proposition}
+
+\begin{proof}
+  Write $x = a_0 + \alpha$, where $\alpha := [0;\, g(0), g(1), \ldots] \in (0, 1)$ is
+  the fractional part of $x$.  Then
+  \[
+    -x \;=\; -a_0 - \alpha \;=\; \underbrace{(-a_0 - 1)}_{\in\,\Z} + (1 - \alpha),
+  \]
+  so the integer part of $-x$ is $-a_0 - 1$ and its fractional part is $1 - \alpha \in (0,1)$.
+  It remains to find the SCF expansion of $1 - \alpha$.
+
+  Setting $\beta := [0;\, g(1), g(2), \ldots]$, we have $\alpha = \dfrac{1}{a_1 + \beta}$, so
+  \[
+    1 - \alpha = \frac{a_1 - 1 + \beta}{a_1 + \beta},
+    \qquad
+    \frac{1}{1 - \alpha} = 1 + \frac{1}{(a_1 - 1) + \beta}.
+  \]
+
+  \textbf{Case $a_1 > 1$.}\;
+  Here $a_1 - 1 \geq 1$, so $(a_1 - 1) + \beta$ is a positive real number with integer part
+  $a_1 - 1$ and fractional part $\beta$.  Thus
+  \[
+    (a_1 - 1) + \beta = [a_1 - 1;\; g(1),\, g(2),\ldots],
+  \]
+  and therefore
+  \[
+    \frac{1}{1 - \alpha}
+      = 1 + \frac{1}{[a_1 - 1;\; g(1),\, g(2), \ldots]}
+      = [1;\; a_1 - 1,\; g(1),\; g(2), \ldots].
+  \]
+  Hence $1 - \alpha = [0;\; 1,\; a_1 - 1,\; g(1),\; g(2), \ldots]$.
+
+  \textbf{Case $a_1 = 1$.}\;
+  Here $a_1 - 1 = 0$, so
+  \[
+    \frac{1}{1 - \alpha} = 1 + \frac{1}{\beta}.
+  \]
+  Since $\beta = [0;\, g(1), g(2), \ldots]$, its reciprocal is
+  $1/\beta = [g(1);\, g(2), g(3), \ldots]$, and therefore
+  \[
+    \frac{1}{1 - \alpha}
+      = 1 + [g(1);\; g(2),\, g(3), \ldots]
+      = [g(1) + 1;\; g(2),\; g(3), \ldots].
+  \]
+  Hence $1 - \alpha = [0;\; g(1) + 1,\; g(2),\; g(3), \ldots]$.
+
+  In both cases $-x$ has integer part $-a_0 - 1$ and body generator $g^*$ as stated.
+\end{proof}
+
+\begin{catenadef}[\texttt{SimpleContinuedFraction.\_\_neg\_\_}]
+\begin{lstlisting}[style=python]
+phi = SimpleContinuedFraction(lambda n: 1, integer_part=1)
+# phi = [1; 1, 1, 1, ...] (golden ratio)
+neg_phi = -phi
+neg_phi.integer_part    # -2
+neg_phi.segment(0)     # [-2;]
+neg_phi.segment(1)     # [-2; 2]
+neg_phi.segment(2)     # [-2; 2, 1]
+
+sqrt5 = catena.numbers.constants.sqrt5
+# sqrt(5) = [2; 4, 4, 4, ...]
+neg_sqrt5 = -sqrt5
+neg_sqrt5.integer_part    # -3
+neg_sqrt5.segment(0)     # [-3;]
+neg_sqrt5.segment(1)     # [-3; 1]
+neg_sqrt5.segment(2)     # [-3; 1, 3]
+neg_sqrt5.segment(5)     # [-3; 1, 3, 4, 4, 4]
 \end{lstlisting}
 \end{catenadef}
 
