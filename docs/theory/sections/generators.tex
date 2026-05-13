@@ -1,0 +1,212 @@
+\section{Generators}
+\label{sec:generators}
+
+The basic notion of a \emph{generator} --- a function $g: I \to \Zp$
+encoding the body coefficients of an SCF --- was introduced in
+Section~\ref{sec:scf} together with the three primitive types
+\texttt{Generator}, \texttt{CachedGenerator}, and \texttt{FiniteGenerator}.
+The present section focuses on the structural operations that transform
+one generator into another: \texttt{advance}, \texttt{insert}, and
+\texttt{prepend}.  It also describes \texttt{PeriodicGenerator}, which
+extends the type hierarchy to eventually-periodic sequences.
+
+\subsection{Structural operations}
+\label{subsec:gen-ops}
+
+All four generator types support three generator-to-generator operations.
+Their specifications are given uniformly here; the per-type notes below
+record any behavioural differences.
+
+\begin{definition}[Advance]
+  \label{def:advance}
+  Let $g: \N \to \Zp$ be a generator and $n \geq 0$ an integer.  The
+  \emph{$n$-advance} of $g$ is the generator
+  \[
+    \mathrm{adv}_n(g)(k) \;=\; g(n + k), \qquad k \geq 0.
+  \]
+  For $n = 0$, $\mathrm{adv}_0(g) = g$ (identity).
+\end{definition}
+
+\begin{remark}
+  In terms of the SCF, advancing the generator by $n$ discards the first $n$
+  body coefficients, which is precisely the operation performed by
+  \texttt{SimpleContinuedFraction.tail(n)}: the $n$-th tail
+  $[a_{n+1};\,a_{n+2},\ldots]$ has body generator
+  $\mathrm{adv}_n(g)$.  The generator-level operation is therefore the
+  foundational primitive underlying \texttt{tail}.
+\end{remark}
+
+\begin{definition}[Insert]
+  \label{def:insert}
+  Let $g: \N \to \Zp$ and let $f = (b_0, \ldots, b_{s-1})$ be a
+  \texttt{FiniteGenerator} of size $s$.  For $\mathtt{at} \geq 0$, the
+  \emph{insertion of $f$ at position $\mathtt{at}$} is the generator
+  \[
+    \mathrm{ins}(g,f,\mathtt{at})(k) =
+    \begin{cases}
+      g(k) & k < \mathtt{at}, \\
+      b_{k - \mathtt{at}} & \mathtt{at} \leq k < \mathtt{at} + s, \\
+      g(k - s) & k \geq \mathtt{at} + s.
+    \end{cases}
+  \]
+\end{definition}
+
+\begin{definition}[Prepend]
+  \label{def:prepend}
+  The \emph{prepend} of $f$ onto $g$ is $\mathrm{ins}(g, f, 0)$: the
+  sequence $b_0, \ldots, b_{s-1}, g(0), g(1), \ldots$
+\end{definition}
+
+\begin{remark}[Prepend and the inverse operation]
+  Proposition~\ref{prop:inverse} (case $a_0 > 0$) shows that inverting
+  a positive SCF amounts to prepending the singleton $[a_0]$ to the body
+  generator.  Conversely, case $a_0 = 0$ removes the first body coefficient
+  to form the new integer part.  Both are special cases of advance/prepend on
+  the generator.
+\end{remark}
+
+\begin{catenadef}[\texttt{advance}, \texttt{insert}, \texttt{prepend}]
+\begin{lstlisting}[style=python]
+from catena.generators import Generator, FiniteGenerator
+
+g = Generator(lambda n: n + 1)   # 1, 2, 3, 4, ...
+f = FiniteGenerator([10, 20])
+
+# advance: shift the index by 3 -> 4, 5, 6, ...
+g3 = g.advance(3)
+[g3(k) for k in range(4)]        # [4, 5, 6, 7]
+
+# insert f at position 2: 1, 2, 10, 20, 3, 4, ...
+h = g.insert(f, at=2)
+[h(k) for k in range(6)]         # [1, 2, 10, 20, 3, 4]
+
+# prepend: 10, 20, 1, 2, 3, ...
+p = g.prepend(f)
+[p(k) for k in range(5)]         # [10, 20, 1, 2, 3]
+\end{lstlisting}
+\end{catenadef}
+
+\paragraph{Type-specific behaviour.}
+
+\begin{description}[leftmargin=2em, style=nextline]
+  \item[\texttt{Generator}]
+    All three operations return a plain \texttt{Generator} wrapping a
+    new closure; no memoisation is carried over.
+
+  \item[\texttt{CachedGenerator}]
+    \texttt{advance} and \texttt{insert} accept an optional
+    \texttt{copy\_cache: bool} flag (default \texttt{False}).
+    When \texttt{True}, cache entries are transferred to the new generator
+    with indices adjusted to reflect the transformation: for an advance by
+    $n$, entry $(k, v)$ with $k \geq n$ is copied as $(k - n, v)$; for an
+    insert at position $p$ with block size $s$, entries before $p$ are
+    copied unchanged and entries from $p$ onwards are shifted to $k + s$.
+    When \texttt{False} the new generator starts with an empty cache,
+    which is appropriate when the closure captured by the new generator
+    differs from the original (e.g., it calls back into the original generator
+    rather than the underlying function directly).
+
+  \item[\texttt{FiniteGenerator}]
+    \texttt{advance}$(n)$ returns the suffix $g[n:]$ as a new
+    \texttt{FiniteGenerator}; advancing past the end raises
+    \texttt{IndexError}.  \texttt{insert} concatenates the underlying
+    arrays, upgrading to the smallest unsigned typecode that covers all
+    values in the combined sequence.  There is no \texttt{prepend} override;
+    it delegates to \texttt{insert(fg, at=0)}.
+
+  \item[\texttt{PeriodicGenerator}]
+    See Section~\ref{subsec:periodic-gen}.
+\end{description}
+
+\subsection{PeriodicGenerator}
+\label{subsec:periodic-gen}
+
+A \texttt{PeriodicGenerator} encodes an eventually-periodic sequence: a
+finite pre-period $(d_0, \ldots, d_{m-1})$ followed by an infinitely
+repeating period $(c_0, \ldots, c_{r-1})$:
+\[
+  g(k) =
+  \begin{cases}
+    d_k & 0 \leq k < m, \\
+    c_{(k - m) \bmod r} & k \geq m.
+  \end{cases}
+\]
+It is the generator type used internally by
+\texttt{PeriodicSimpleContinuedFraction}.
+
+\paragraph{Advance.}
+Let $n \geq 0$.
+\begin{itemize}
+  \item If $n < m$: the new pre-period is $(d_n, \ldots, d_{m-1})$; the
+        period is unchanged.
+  \item If $n \geq m$: the pre-period is empty and the period is rotated by
+        $(n - m) \bmod r$ positions:
+        \[
+          (c_r, c_{r+1}, \ldots, c_{r-1}) \mapsto
+          (c_{r'}, c_{r'+1}, \ldots, c_{r'-1})
+          \quad\text{where } r' = (n - m) \bmod r.
+        \]
+\end{itemize}
+In both cases the result is a \texttt{PeriodicGenerator} with the same or
+shorter pre-period and a period that is a rotation of the original.
+
+\paragraph{Insert.}
+Inserting a \texttt{FiniteGenerator} $f$ of size $s$ at position
+$\mathtt{at}$:
+\begin{itemize}
+  \item If $\mathtt{at} \leq m$: $f$ is spliced into the pre-period;
+        the period is unchanged.
+  \item If $\mathtt{at} > m$: one copy of the period is unrolled into
+        the pre-period up to the insertion point, $f$ is spliced in, and
+        the original period is kept.  Concretely, the new pre-period is
+        \[
+          (d_0, \ldots, d_{m-1},\,
+           c_0, \ldots, c_{s'-1},\,
+           b_0, \ldots, b_{s-1},\,
+           c_{s'}, \ldots, c_{r-1})
+          \quad\text{where } s' = (\mathtt{at} - m) \bmod r,
+        \]
+        and the period remains $(c_0, \ldots, c_{r-1})$.
+\end{itemize}
+
+\begin{remark}
+  After an insert with $\mathtt{at} > m$, the period is
+  \emph{not} lengthened; only one instance of the period is unrolled into the
+  pre-period to accommodate the inserted block.  The resulting sequence is
+  still eventually periodic with the same period, just a longer pre-period.
+  This is the minimal representation: a shorter pre-period would require
+  the inserted block to appear infinitely often, which is not the case.
+\end{remark}
+
+\begin{catenadef}[\texttt{PeriodicGenerator.advance} and \texttt{insert}]
+\begin{lstlisting}[style=python]
+from catena.generators import FiniteGenerator, PeriodicGenerator
+
+# period (1, 2, 3), pre-period (9, 8)
+pg = PeriodicGenerator(period=[1, 2, 3], pre_period=[9, 8])
+# sequence: 9, 8, | 1, 2, 3, 1, 2, 3, ...
+
+# advance by 1: pre-period shrinks to (8,)
+pg.advance(1).pre_period   # FiniteGenerator([8])
+pg.advance(1).period       # FiniteGenerator([1, 2, 3])
+
+# advance by 3 (past the pre-period): period rotates by (3-2)%3 = 1
+pg.advance(3).pre_period   # FiniteGenerator([])
+pg.advance(3).period       # FiniteGenerator([2, 3, 1])
+
+# insert [7] at position 4 (within the first copy of the period):
+# pre-period becomes (9, 8, 1, 2, 7, 3), period stays (1, 2, 3)
+ins = pg.insert(FiniteGenerator([7]), at=4)
+ins.pre_period             # FiniteGenerator([9, 8, 1, 2, 7, 3])
+ins.period                 # FiniteGenerator([1, 2, 3])
+[ins(k) for k in range(10)]
+# [9, 8, 1, 2, 7, 3, 1, 2, 3, 1]
+\end{lstlisting}
+\end{catenadef}
+
+\paragraph{Quadratic coefficients.}
+\texttt{PeriodicGenerator} also exposes
+\texttt{quadratic\_coefficients()}, which returns the primitive polynomial
+$(A, B, C)$ satisfied by the value of the generator (with integer part
+zero).  The derivation is described in
+Section~\ref{subsubsec:pscf-to-surd}; it is not repeated here.

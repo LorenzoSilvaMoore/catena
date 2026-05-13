@@ -3,17 +3,14 @@
 % ─────────────────────────────────────────────────────────────────────────────
 
 By Lagrange's theorem, a real number has an eventually periodic continued
-fraction expansion if and only if it is a \emph{quadratic irrational} — a root
+fraction expansion if and only if it is a \emph{quadratic irrational} or \emph{quadratic surd} — a root
 of a degree-two polynomial with integer coefficients that is not itself
-rational.  The favorite examples are $\sqrt{2} = [1;\,\overline{2}]$,
+rational. The favorite examples are $\sqrt{2} = [1;\,\overline{2}]$,
 $\varphi = [1;\,\overline{1}]$, and more generally every expression of the
 form $(P + \sqrt{D})/Q$ with $D$ not a perfect square.
 This section introduces \texttt{PeriodicSimpleContinuedFraction}, the \catena
 class that represents such numbers exactly and exposes their structure through
 the same functional interface used by \texttt{SimpleContinuedFraction}.
-The deeper theory — the proof of Lagrange's theorem, the correspondence with
-Pell equations, and the algebraic operations on quadratic irrationals — is
-deferred to a forthcoming section.
 
 \subsection{Purely periodic vs.\ eventually periodic}
 
@@ -141,6 +138,811 @@ print(y.period)              # (5, 1, 1, 1, 24, 1, 1, 1)
 \end{lstlisting}
 \end{catenadef}
 
+\subsection{Lagrange's theorem and quadratic surds}
+
+Lagrange's theorem states that a real number has an eventually periodic SCF expansion if and only 
+if it is a quadratic irrational. The proof is not difficult, but it falls outside the scope of this 
+document. Nonetheless, the theorem is fundamental to the design of \texttt{PeriodicSimpleContinuedFraction} 
+and to the correctness of its methods, so we will not only state it here but also use it as a guiding principle.
+The two constructive directions of this correspondence — expanding a given
+$(P + \sqrt{D})/Q$ into its PSCF, and recovering the surd parameters from a PSCF — are
+developed in \S\ref{subsec:conversion}.
+
+\begin{definition}[Quadratic surd]
+  A \emph{quadratic surd} is a real number of the form
+  \[
+    x = \frac{P + \sqrt{D}}{Q},
+  \]
+  where $P, Q, D \in \Z$, $Q \neq 0$, $D \geq 0$, and $D$ is not a perfect square.
+\end{definition}
+
+\begin{remark}
+  The term ``quadratic irrational'' is often used interchangeably with ``quadratic surd'', but the 
+  latter emphasizes the radical representation. In the context of continued fractions, both 
+  terms refer to the same class of numbers that have eventually periodic expansions.
+
+  Moreover, it is not infrequent to encounter the equivalent form $(a + b\sqrt{d})$ with $a, b \in \Q$ 
+  and $d \in \Zp$ not a perfect square. The choice of representation is a matter of convention, 
+  and the two forms are related by simple algebraic manipulations. In \catena, we adopt the $(P + \sqrt{D})/Q$ 
+  form for consistency and to facilitate the implementation of methods that rely on the 
+  algebraic properties of quadratic surds.
+\end{remark}
+
+The triple $(P, Q, D)$ is not a unique representation of a given quadratic surd: for example,
+$(2, 4, 8)$ and $(1, 2, 2)$ both represent $\tfrac{1 + \sqrt{2}}{2}$ via
+$(2 + \sqrt{8})/4 = (2 + 2\sqrt{2})/4 = (1 + \sqrt{2})/2$.
+The two normalization operations below address distinct aspects of this non-uniqueness.
+
+\subsubsection{Simplified form}
+
+\begin{definition}[Simplified form]
+  \label{def:simplified-surd}
+  A quadratic surd $(P + \sqrt{D})/Q$ is in \emph{simplified form} if there is no integer $g > 1$
+  such that $g \mid P$, $g \mid Q$, and $g^2 \mid D$ simultaneously.  Equivalently, writing $s$
+  for the largest integer with $s^2 \mid D$, the condition is
+  \[
+    \gcd(P,\, Q,\, s) = 1.
+  \]
+  The simplification does \emph{not} constrain the sign of $Q$.
+\end{definition}
+
+\begin{remark}[Motivation]
+  Simplified form is the canonical storage format for quadratic surds in \catena.
+  Without it, the same surd can be represented by infinitely many triples $(kP, kQ, k^2 D)$ for
+  any non-zero integer $k$, making equality checks, hashing, and memoisation unreliable.  By
+  reducing to simplified form, every quadratic surd has a unique representation up to the sign of
+  $Q$ — a sign that carries separate semantic meaning (see principal vs.\ conjugate below) and must
+  therefore be preserved.
+
+  Note that this is strictly a \emph{representational} normalisation: it does not affect the sign
+  of either $P$ or $Q$, so $\operatorname{sign}(Q)$ is left intact.
+\end{remark}
+
+\begin{catenadef}[\texttt{simplify\_quadratic\_surd}]
+\begin{lstlisting}[style=python]
+from catena.mathlib.quadratic import simplify_quadratic_surd
+
+# (2 + sqrt(8)) / 4  =  (1 + sqrt(2)) / 2
+simplify_quadratic_surd(2, 4, 8)    # (1, 2, 2)
+
+# Signs are preserved: (-1 + sqrt(3)) / (-2) stays negative-Q
+simplify_quadratic_surd(-1, -2, 3)  # (-1, -2, 3)  (already simplified)
+
+# g = gcd(P, Q, square_part(sqrt(D))); divides P -> P/g, Q -> Q/g, D -> D/g^2
+simplify_quadratic_surd(6, 4, 12)   # g = gcd(6, 4, 2) = 2 -> (3, 2, 3)
+\end{lstlisting}
+\end{catenadef}
+
+\subsubsection{Normalized form}
+
+\begin{definition}[Normalized form]
+  \label{def:normalized-surd}
+  A quadratic surd $(P + \sqrt{D})/Q$ is in \emph{normalized form} if
+  \[
+    Q \mid (D - P^2).
+  \]
+\end{definition}
+
+\begin{remark}[Motivation]
+  Normalized form is an \emph{algorithmic} requirement, not a canonicalization.  The expansion
+  algorithm \texttt{from\_quadratic\_surd\_to\_scf} computes successive remainders via the recurrence
+  \[
+    m_{n+1} = a_n\, d_n - m_n,
+    \qquad
+    d_{n+1} = \frac{D - m_{n+1}^2}{d_n},
+  \]
+  where $(m_0, d_0) = (P, Q)$ and $a_n = \lfloor(m_n + \lfloor\sqrt{D}\rfloor)/d_n\rfloor$.
+  For $d_{n+1}$ to be an integer, we need $d_n \mid (D - m_{n+1}^2)$ at every step.
+  One can verify that this divisibility propagates automatically once it holds at $n = 0$,
+  i.e., once $Q \mid (D - P^2)$.  
+
+  When the user supplies an arbitrary triple $(P, Q, D)$, this condition need not hold.
+  \texttt{normalize\_quadratic\_surd} finds the minimal positive integer
+  \[
+    k = \frac{|Q|}{\gcd(|Q|,\, |D - P^2|)}
+  \]
+  and rescales $(P, Q, D) \mapsto (kP, kQ, k^2 D)$.  The value is unchanged since
+  $(kP + \sqrt{k^2 D})/(kQ) = (P + \sqrt{D})/Q$, but now $kQ \mid (k^2 D - k^2 P^2) = k^2(D -
+  P^2)$, which follows because $k|Q| / k = |Q|$ divides $k(D - P^2) = \operatorname{lcm}(|Q|,\,|D -
+  P^2|)$ by construction.  The absolute value on $Q$ is necessary to keep $k$ positive
+  (and hence preserve $\operatorname{sign}(Q)$ under the rescaling); the absolute value on
+  $D - P^2$ is necessary so that the integer division $k = \operatorname{lcm}/|D - P^2|$ yields
+  a positive result.
+
+  Simplified form and normalized form are independent: a surd can be simplified but not normalized
+  (e.g.\ $(1, 3, 2)$, where $3 \nmid 2 - 1 = 1$) or normalized but not simplified (e.g.\
+  $(2, 4, 8)$, where $4 \mid 8 - 4 = 4$, but $g = 2 > 1$).  In \catena, normalization is applied
+  internally by \texttt{from\_quadratic\_surd\_to\_scf} and is never exposed as a public state.
+\end{remark}
+
+\begin{catenadef}[\texttt{normalize\_quadratic\_surd}]
+\begin{lstlisting}[style=python]
+from catena.mathlib.quadratic import normalize_quadratic_surd
+
+# (1 + sqrt(2)) / 3: D - P^2 = 1, lcm(3,1)/1 = 3, so k = 3.
+normalize_quadratic_surd(1, 3, 2)   # (3, 9, 18): 9 | (18 - 9) = 9  (ok)
+
+# Already normalized: (1 + sqrt(3)) / 2, D - P^2 = 2, 2 | 2 (ok), k = 1.
+normalize_quadratic_surd(1, 2, 3)   # (1, 2, 3)
+\end{lstlisting}
+\end{catenadef}
+
+\subsubsection{Quadratic polynomials and the minimal polynomial}
+
+\begin{lemma}[Mapping between quadratic surds and quadratic polynomials]
+  \label{lem:surd-poly}
+  Every quadratic surd $(P + \sqrt{D})/Q$ (in simplified form) is the root of a unique
+  simplified quadratic polynomial $Ax^2 + Bx + C = 0$ with integer coefficients and $A > 0$.
+  Conversely, every such polynomial with positive non-square discriminant has exactly two roots,
+  both quadratic surds, forming a conjugate pair.
+\end{lemma}
+
+\begin{proof}
+  The roots of $Ax^2 + Bx + C = 0$ are $(-B \pm \sqrt{B^2 - 4AC})/(2A)$.  Setting $P = -B$,
+  $Q = 2A$, $D = B^2 - 4AC$ gives the surd form for the $+$ branch.
+
+  Conversely, given $(P + \sqrt{D})/Q$, we apply the normalized transformation $(P, Q, D) \mapsto (P^*, Q^*, D^*)$, where we have
+  by construction $Q^* \mid (D^* - P^{*2})$, and the identity
+  \[
+    \frac{P + \sqrt{D}}{Q} = \frac{P^* + \sqrt{D^*}}{Q^*}.
+  \]
+  Then, multiplying
+  \[
+  Q^*x - P^* = \sqrt{D^*}
+  \]
+  through by itself gives
+  \[
+  Q^{*2}x^2 - 2P^*Q^*x + (P^{*2} - D^*) = 0.
+  \]
+  Since the surd is normalized, then dividing by $Q^*$
+  yields
+  \[
+  Q^*x^2 - 2P^*x + \frac{P^{*2}-D^*}{Q^{*}} = 0,
+  \]
+  which has integer coefficients. Finally, we multiply through by $\text{sign}(Q^*)$ to ensure a positive leading coefficient.
+\end{proof}
+
+\begin{definition}[Minimal polynomial and quadratic coefficients]
+  \label{def:quadratic-coefficients}
+  The \emph{minimal polynomial} of a quadratic surd $x$ is the unique polynomial
+  $Ax^2 + Bx + C = 0$ with integer coefficients, $A > 0$, and $\gcd(A, B, C) = 1$.
+  The triple $(A, B, C)$ is called the \emph{quadratic coefficients} of $x$.
+\end{definition}
+
+\begin{remark}[Why $A > 0$]
+  The sign convention $A > 0$ is a normalization choice.  Any minimal polynomial can be
+  multiplied by $-1$ without changing its roots, so without a convention the triple $(A, B, C)$
+  is determined only up to sign.  Fixing $A > 0$ makes the triple canonical, which is essential
+  for hashing and equality: \texttt{PeriodicSimpleContinuedFraction.\_\_eq\_\_} and
+  \texttt{\_\_hash\_\_} delegate to \texttt{quadratic\_surd()}, which is itself derived from the
+  canonical triple.
+
+  Furthermore, $A > 0$ ensures a consistent correspondence with the surd: the $+$ branch of the
+  quadratic formula, $(-B + \sqrt{B^2 - 4AC})/(2A)$, always gives the \emph{larger} of the two
+  roots when $A > 0$, which \catena designates the \emph{principal} root (see below).
+\end{remark}
+
+\begin{remark}[Quadratic coefficients of a PSCF with non-zero integer part]
+  \texttt{PeriodicSimpleContinuedFraction.quadratic\_coefficients()} first computes the minimal
+  polynomial $(A, B, C)$ of the tail SCF (the value of the \emph{body generator} with $a_0 = 0$)
+  via \texttt{PeriodicGenerator.quadratic\_coefficients()}.  If the stored integer part $a_0 = 0$,
+  this is returned directly.
+
+  When $a_0 \neq 0$, the full value is $x = y + a_0$ where $y$ satisfies $Ay^2 + By + C = 0$.
+  Substituting $y = x - a_0$:
+  \[
+    A(x - a_0)^2 + B(x - a_0) + C = 0
+    \quad\Longrightarrow\quad
+    Ax^2 + (B - 2Aa_0)x + (Aa_0^2 - Ba_0 + C) = 0.
+  \]
+  The adjusted coefficients are therefore
+  \[
+    A' = A, \qquad B' = B - 2Aa_0, \qquad C' = C - Ba_0 + Aa_0^2.
+  \]
+  Since $A > 0$ is preserved under this substitution and $\gcd(A, B, C) = 1$ also propagates,
+  no further normalization is needed.
+\end{remark}
+
+\begin{catenadef}[\texttt{PeriodicSimpleContinuedFraction.quadratic\_coefficients}]
+\begin{lstlisting}[style=python]
+from catena import PeriodicSimpleContinuedFraction as PSCF
+
+sqrt2 = PSCF(period=[2], integer_part=1)        # [1; 2,2,2,...] = sqrt(2)
+sqrt2.quadratic_coefficients()    # (1, 0, -2)  ->  x^2 - 2 = 0
+
+phi = PSCF(period=[1], integer_part=1)           # [1; 1,1,1,...] = golden ratio
+phi.quadratic_coefficients()      # (1, -1, -1)  ->  x^2 - x - 1 = 0
+
+# PSCF with non-zero integer part: y satisfies A'y^2 + B'y + C' = 0
+# where the shift x = y + a0 is accounted for.
+x = PSCF(period=[1, 3], integer_part=3)          # [3; 1,3,1,3,...]
+x.quadratic_coefficients()        # the generator's (A,B,C) shifted by a0 = 3
+\end{lstlisting}
+\end{catenadef}
+
+\subsubsection{Principal and conjugate surds}
+
+\begin{definition}[Principal and conjugate roots]
+  \label{def:principal-conjugate}
+  Let $x$ be a quadratic surd with minimal polynomial $Ax^2 + Bx + C = 0$ ($A > 0$).
+  Setting $P = -B$, $Q = 2A$, $D = B^2 - 4AC$, the two roots are
+  \[
+    x_+ = \frac{P + \sqrt{D}}{Q}, \qquad x_- = \frac{P - \sqrt{D}}{Q} = \frac{-P + \sqrt{D}}{-Q}.
+  \]
+  Since $A > 0$ we have $Q > 0$, so $x_+$ is the \emph{principal root} and $x_-$ is the
+  \emph{conjugate root}.  In \catena's $(P, Q, D)$ representation:
+  \begin{itemize}
+    \item $Q > 0$ \;\;$\Longleftrightarrow$\;\; the surd is the principal root (\texttt{is\_principal\_surd()}).
+    \item $Q < 0$ \;\;$\Longleftrightarrow$\;\; the surd is the conjugate root (\texttt{is\_conjugate\_root()}).
+  \end{itemize}
+\end{definition}
+
+\begin{remark}[Sign of $Q$ as a root selector]
+  The sign of $Q$ is the only way \catena distinguishes the two roots of the same minimal
+  polynomial, without carrying an explicit $\pm$ flag.  This design choice propagates through
+  several operations:
+  \begin{itemize}
+    \item \texttt{quadratic\_surd()} checks which root the stored PSCF expansion corresponds to
+          (by re-expanding and comparing) and returns $(P, Q, D)$ with the appropriate sign.
+    \item \texttt{\_\_neg\_\_} maps $(P, Q, D) \mapsto (P, -Q, D)$, because $-(P + \sqrt{D})/Q =
+          (P + \sqrt{D})/(-Q)$; this flips the root selector.
+    \item \texttt{inverse()} rationalizes differently depending on the sign of $Q$ (see below),
+          because the denominators $P^2 - D$ may differ in sign between the two branches.
+  \end{itemize}
+\end{remark}
+
+\begin{catenadef}[\texttt{is\_principal\_surd}, \texttt{is\_conjugate\_root}]
+\begin{lstlisting}[style=python]
+from catena import PeriodicSimpleContinuedFraction as PSCF
+
+phi = PSCF(period=[1], integer_part=1)   # golden ratio phi ~ 1.618
+phi.is_principal_surd()    # True   (Q > 0)
+phi.is_conjugate_root()    # False
+
+conj = phi.conjugate()     # the other root ~ -0.618
+conj.is_principal_surd()   # False
+conj.is_conjugate_root()   # True   (Q < 0)
+
+# Negating flips the root selector
+neg_phi = -phi             # -phi ~ -1.618
+neg_phi.is_principal_surd()   # False  (sign of Q is flipped by negation)
+\end{lstlisting}
+\end{catenadef}
+
+\begin{definition}[Algebraic conjugate]
+  \label{def:conjugate}
+  Let $x = (P + \sqrt{D})/Q$ be a quadratic surd.  Its \emph{algebraic conjugate} is
+  \[
+    \bar{x} = \frac{P - \sqrt{D}}{Q} = \frac{-P + \sqrt{D}}{-Q}.
+  \]
+  In $(P, Q, D)$ coordinates, passing to the conjugate sends $(P, Q, D) \mapsto (-P, -Q, D)$:
+  the radicand $D$ is unchanged, while both $P$ and $Q$ are negated.
+\end{definition}
+
+\begin{remark}[Why the conjugate matters]
+  The two roots $x$ and $\bar{x}$ satisfy the same minimal polynomial, and by Galois theory every
+  polynomial identity with rational coefficients that holds for one root
+  also holds for the other. In the SCF setting, the conjugate appears naturally when inverting a PSCF: if $x = (P +
+  \sqrt{D})/Q$ then
+  \[
+    \frac{1}{x} = \frac{Q}{P + \sqrt{D}} = \frac{Q(P - \sqrt{D})}{P^2 - D}
+    = \frac{Q^2}{P^2 - D} \bar{x},
+  \]
+  i.e.\ the inverse is expressed using the conjugate's numerator.  \catena stores the conjugate
+  in a write-once \texttt{\_conjugate} attribute (mirroring the \texttt{\_inverse} pattern) so
+  that \texttt{conjugate()} is an involution: \texttt{scf.conjugate().conjugate() is scf}.
+\end{remark}
+
+\begin{catenadef}[\texttt{PeriodicSimpleContinuedFraction.conjugate}]
+\begin{lstlisting}[style=python]
+from catena import PeriodicSimpleContinuedFraction as PSCF
+
+phi = PSCF(period=[1], integer_part=1)       # phi = (1 + sqrt(5))/2  ~  1.618
+conj = phi.conjugate()                        # (1 - sqrt(5))/2  ~  -0.618
+
+phi.quadratic_surd()         # (1, 2, 5)   -> P=1,  Q=2  (principal)
+conj.quadratic_surd()        # (-1, -2, 5) -> P=-1, Q=-2 (conjugate)
+
+phi.conjugate().conjugate() is phi   # True  (write-once involution)
+
+# Both roots share the same minimal polynomial:
+phi.quadratic_coefficients()    # (1, -1, -1)
+conj.quadratic_coefficients()   # (1, -1, -1)
+\end{lstlisting}
+\end{catenadef}
+
+\subsubsection{Multiplicative inverse}
+
+\begin{lemma}[Reflected polynomial]
+  \label{lem:reflected-poly}
+  Let $x$ be a quadratic surd with minimal polynomial $Ax^2 + Bx + C = 0$
+  ($A > 0$, $\gcd(A,B,C) = 1$, $C \neq 0$).  Then $y = 1/x$ is also a quadratic surd,
+  satisfying
+  \[
+    Cy^2 + By + A = 0.
+  \]
+  Normalizing to a positive leading coefficient gives the minimal polynomial of $1/x$:
+  \[
+    (A',\, B',\, C') \;=\; \operatorname{sign}(C)\cdot(C,\, B,\, A).
+  \]
+  We call this the \emph{reflected polynomial} of $Ax^2 + Bx + C = 0$.
+  Its discriminant equals that of the original: $B^2 - 4A'C' = B^2 - 4AC = D$, so
+  both polynomial families share the same radicand $D$.
+\end{lemma}
+
+\begin{proof}
+  Multiply $Ax^2 + Bx + C = 0$ through by $x^{-2}$:
+  \[
+    A + Bx^{-1} + Cx^{-2} = 0
+    \;\Longrightarrow\;
+    Cy^2 + By + A = 0, \quad y = 1/x.
+  \]
+  Since $\gcd(A,B,C) = 1$ we also have $\gcd(C,B,A) = 1$, so multiplying by
+  $\operatorname{sign}(C)$ produces produces the unique primitive polynomial with positive leading coefficient.
+  The discriminant claim follows immediately from $B^2 - 4(\operatorname{sign}(C)\cdot C)
+  (\operatorname{sign}(C)\cdot A) = B^2 - 4AC$.
+\end{proof}
+
+\begin{remark}[Inversion formula and the role of $\operatorname{sign}(Q)$]
+  Although the algebraic identity
+  \[
+  \frac{1}{x}
+  =
+  \frac{-QP+Q\sqrt{D}}{D-P^2}
+  \]
+  holds formally, \catena does not store arbitrary signed multiples of
+  $\sqrt D$.  By convention, quadratic surds are always represented in the
+  form
+  \[
+  \frac{P+\sqrt D}{Q},
+  \]
+  with the choice of root encoded solely by $\operatorname{sign}(Q)$.
+  Consequently, the sign of $Q$ must be extracted explicitly from the radical
+  term when rationalizing, leading to the two implementation branches below.
+
+  Starting from $x = (P + \sqrt{D})/Q$, rationalising gives
+  \[
+    \frac{1}{x} = \frac{Q\,(P - \sqrt{D})}{P^2 - D}.
+  \]
+  To rewrite this in $(P' + \sqrt{D})/Q'$ form we need to extract $\sqrt{D}$ from the
+  numerator.  Because $\sqrt{Q^2 D} = \lvert Q\rvert \sqrt{D}$, we have
+  $Q\sqrt{D} = \operatorname{sign}(Q)\cdot\sqrt{Q^2 D}$, and the two branches of the
+  computation are therefore:
+  \begin{itemize}
+    \item \textbf{$Q > 0$ (principal surd):}\quad
+          $Q\sqrt{D} = \sqrt{Q^2 D}$, so
+          \[
+            \frac{1}{x} = \frac{-QP + \sqrt{Q^2 D}}{D - P^2},
+          \]
+          giving $(P',\, Q',\, D') = \bigl(-QP,\; D - P^2,\; Q^2 D\bigr)$ before simplification.
+
+    \item \textbf{$Q < 0$ (conjugate surd):}\quad
+          $Q\sqrt{D} = -\sqrt{Q^2 D}$, so
+          \[
+            \frac{1}{x} = \frac{QP + \sqrt{Q^2 D}}{P^2 - D},
+          \]
+          giving $(P',\, Q',\, D') = \bigl(QP,\; P^2 - D,\; Q^2 D\bigr)$ before simplification.
+  \end{itemize}
+  In both cases the unsimplified triple is passed to \texttt{from\_quadratic\_surd}, which
+  simplifies it and runs the expansion algorithm.  The sign of the resulting $Q'$ is then
+  determined by checking which root of the reflected polynomial the PSCF actually represents
+  (via \texttt{quadratic\_surd()}), not by the intermediate arithmetic.
+  Note that whether the inverse turns out to be the principal or conjugate root of the
+  reflected polynomial depends on the sign of $D - P^2$: for the principal-surd branch,
+  $Q'$ inherits the sign of $D - P^2$ (before simplification), which is not fixed.
+\end{remark}
+
+\begin{remark}[Four quadratic surds related by conjugation and inversion]
+  \label{rem:four-surds}
+  Every quadratic surd $x$ (with $C \neq 0$, so that $1/x$ is also irrational) belongs
+  to a family of four objects closed under conjugation and inversion:
+  \[
+    \begin{array}{ll}
+      x                               & \bar{x} = \operatorname{conj}(x) \\[4pt]
+      1/x = \operatorname{inv}(x) & 1/\bar{x} = \operatorname{conj}\!\bigl(\operatorname{inv}(x)\bigr)
+    \end{array}
+  \]
+  The top row satisfies the minimal polynomial $Ax^2 + Bx + C = 0$; the bottom row
+  satisfies the reflected polynomial $(A', B', C')$ from Lemma~\ref{lem:reflected-poly}.
+  All four surds share the same radicand $D$.
+
+  The two operations commute:
+  \[
+    \operatorname{inv}\!\bigl(\operatorname{conj}(x)\bigr)
+    = \operatorname{conj}\!\bigl(\operatorname{inv}(x)\bigr),
+  \]
+  so the family is the orbit of $x$ under the group
+  $\bigl\{\mathrm{id},\;\operatorname{conj},\;\operatorname{inv},\;
+  \operatorname{inv}\circ\operatorname{conj}\bigr\} \cong (\Z/2\Z)^2$.
+  The sign of $Q$ — \catena's root selector — distinguishes the two elements in
+  each row: $Q > 0$ for a principal root, $Q < 0$ for a conjugate root.
+\end{remark}
+
+\begin{catenadef}[\texttt{PeriodicSimpleContinuedFraction.inverse}]
+\begin{lstlisting}[style=python]
+from catena import PeriodicSimpleContinuedFraction as PSCF
+
+phi = PSCF(period=[1], integer_part=1)       # phi = (1 + sqrt(5))/2  ~  1.618
+# phi satisfies x^2 - x - 1 = 0
+phi.quadratic_coefficients()                  # (1, -1, -1)
+
+# 1/phi satisfies the reflected polynomial: swap A and C, normalize sign
+# C = -1  ->  sign(C) * (C, B, A) = (-1)*(-1, -1, 1) = (1, 1, -1)  ->  y^2 + y - 1 = 0
+inv_phi = phi.inverse()                       # (sqrt(5) - 1)/2  ~  0.618
+inv_phi.quadratic_coefficients()              # (1, 1, -1)
+
+# The four related objects all share radicand D = 5:
+phi.quadratic_surd()                          # (1, 2, 5)    principal of x^2 - x - 1 = 0
+phi.conjugate().quadratic_surd()              # (-1, -2, 5)  conjugate of x^2 - x - 1 = 0
+inv_phi.quadratic_surd()                      # (-1, 2, 5)   principal of y^2 + y - 1 = 0
+inv_phi.conjugate().quadratic_surd()          # (1, -2, 5)   conjugate of y^2 + y - 1 = 0
+
+# Commutativity of conjugate and inverse:
+phi.conjugate().inverse() == inv_phi.conjugate()   # True
+
+# Write-once involution:
+phi.inverse().inverse() is phi                     # True
+\end{lstlisting}
+\end{catenadef}
+
+\begin{remark}[Inversion does not preserve root orientation]
+  Unlike conjugation and negation, inversion does not act predictably on
+  \catena's root selector.  If
+  \[
+    x = \frac{P + \sqrt{D}}{Q}
+  \]
+  is represented with $Q > 0$ (a principal surd), then before simplification
+  the inverse has denominator
+  \[
+    Q' = D - P^2.
+  \]
+  Consequently, the sign of $Q'$ — and therefore whether $1/x$ is principal
+  or conjugate — depends on the arithmetic relation between $P^2$ and $D$.
+  In particular, inversion may preserve or flip the root orientation.
+\end{remark}
+
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Conversion algorithms: quadratic surd $\leftrightarrow$ PSCF}
+\label{subsec:conversion}
+% ─────────────────────────────────────────────────────────────────────────────
+
+Lagrange's theorem guarantees a bijective correspondence between quadratic surds
+and eventually-periodic SCFs, but the theorem itself is non-constructive.
+This subsection makes the correspondence explicit in both directions.
+\S\ref{subsubsec:surd-to-pscf} describes the algorithm that expands a given
+quadratic surd $(P + \sqrt{D})/Q$ into a PSCF; \S\ref{subsubsec:pscf-to-surd}
+describes the inverse recovery.  Together they underpin
+\texttt{from\_quadratic\_surd}, \texttt{quadratic\_coefficients}, and
+\texttt{quadratic\_surd}.
+
+\subsubsection{Expanding a quadratic surd into a PSCF}
+\label{subsubsec:surd-to-pscf}
+
+The function \texttt{from\_quadratic\_surd\_to\_scf}$(P, Q, D)$ computes the
+integer part, pre-period, and period of the PSCF whose value is
+$(P + \sqrt{D})/Q$.  It proceeds in three stages: normalization, iterative
+generation of complete quotients, and period detection via cycle recognition.
+
+\paragraph{Stage 1: normalization.}
+The algorithm requires the \emph{divisibility invariant} $Q \mid (D - P^2)$
+throughout its execution.  To see why, note that each iteration produces a
+new denominator $d_{n+1} = (D - m_{n+1}^2)/d_n$: for this to be an integer,
+$d_n$ must divide $D - m_{n+1}^2$.  As the proof of
+Lemma~\ref{lem:cq-recurrence} shows, this divisibility propagates
+automatically from step to step once it holds at $n = 0$, i.e.\ once
+$Q \mid (D - P^2)$.  An arbitrary user-supplied triple need not satisfy this
+condition, so \texttt{normalize\_quadratic\_surd} rescales it first.
+
+Specifically, the function finds the minimal positive integer
+\[
+  k = \frac{|Q|}{\gcd(|Q|,\,|D - P^2|)}
+\]
+and replaces $(P, Q, D)$ by $(kP,\, kQ,\, k^2 D)$.  The value is unchanged:
+$(kP + \sqrt{k^2 D})/(kQ) = (P + \sqrt{D})/Q$.  After rescaling,
+$kQ \mid k^2(D - P^2)$ holds because $|Q|$ divides
+$k \cdot |D - P^2| = \operatorname{lcm}(|Q|,\,|D - P^2|)$ by construction.
+The absolute value on $Q$ is necessary to keep $k$ positive (so that
+$\operatorname{sign}(Q)$ is preserved); the absolute value on $D - P^2$
+ensures that the integer division $k = \operatorname{lcm}/|D - P^2|$ yields
+a positive result.
+
+With the normalization in place we write $(P, Q, D)$ for the rescaled parameters
+and record the established invariant:
+\[
+  Q \mid (D - P^2). \tag{N}
+\]
+
+\paragraph{Stage 2: complete quotients.}
+The standard strategy for computing the SCF of an irrational $x$ is to iterate
+the map $x \mapsto 1/\{x\}$, where $\{x\} = x - \lfloor x \rfloor$ is the
+fractional part: the integer parts extracted along the way are precisely the
+partial quotients.  Define
+\[
+  a_n = \lfloor x_n \rfloor, \qquad x_{n+1} = \frac{1}{x_n - a_n},
+\]
+with $x_0 = (P + \sqrt{D})/Q$.  The key structural observation is that, for
+quadratic surds, this iteration \emph{preserves the surd form}: every
+complete quotient $x_n$ is again of the form $(m_n + \sqrt{D})/d_n$ for integers
+$m_n, d_n$ — with the \emph{same} radicand $D$ throughout.  This is what makes
+the algorithm finite: the state $(m_n, d_n)$ lives in a bounded integer lattice
+and must eventually repeat, forcing the SCF to be periodic.
+
+\begin{lemma}[Complete-quotient recurrence]
+  \label{lem:cq-recurrence}
+  Every complete quotient has the form $x_n = (m_n + \sqrt{D})/d_n$ where the
+  pairs $(m_n, d_n)$ satisfy the recurrence
+  \[
+    m_{n+1} = a_n\, d_n - m_n,
+    \qquad
+    d_{n+1} = \frac{D - m_{n+1}^2}{d_n}, \tag{R}
+  \]
+  with base case $(m_0, d_0) = (P, Q)$.  Moreover, the divisibility invariant
+  $d_n \mid (D - m_n^2)$ holds for all $n \geq 0$, so every $d_{n+1}$ is an
+  integer; and $d_n \neq 0$ for all $n$, since $d_{n+1} = 0$ would require
+  $m_{n+1}^2 = D$, contradicting the assumption that $D$ is not a perfect
+  square.
+\end{lemma}
+
+\begin{proof}
+  \emph{Recurrence.}  Suppose $x_n = (m_n + \sqrt{D})/d_n$.  Define
+  $m_{n+1} = a_n d_n - m_n$; then
+  \[
+    x_n - a_n = \frac{\sqrt{D} - m_{n+1}}{d_n},
+  \]
+  and inverting:
+  \[
+    x_{n+1}
+    = \frac{d_n}{\sqrt{D} - m_{n+1}}
+    = \frac{d_n(\sqrt{D} + m_{n+1})}{D - m_{n+1}^2}
+    = \frac{m_{n+1} + \sqrt{D}}{d_{n+1}}.
+  \]
+  \emph{Divisibility invariant by induction.}
+  The base case is condition~(N).  Given $d_n \mid (D - m_n^2)$, expand
+  \begin{align*}
+    D - m_{n+2}^2
+    &= D - (a_{n+1}d_{n+1} - m_{n+1})^2 \\
+    &= (D - m_{n+1}^2) + 2a_{n+1}d_{n+1}m_{n+1} - a_{n+1}^2 d_{n+1}^2 \\
+    &= d_{n+1}\bigl(d_n + 2a_{n+1}m_{n+1} - a_{n+1}^2 d_{n+1}\bigr),
+  \end{align*}
+  using $D - m_{n+1}^2 = d_n d_{n+1}$.  The right-hand side is divisible by
+  $d_{n+1}$, so the invariant propagates. \qed
+\end{proof}
+
+\paragraph{Stage 2 (continued): integer-arithmetic floor.}
+The partial quotient $a_n = \lfloor(m_n + \sqrt{D})/d_n\rfloor$ must be computed
+exactly in pure integer arithmetic: floating-point evaluation of $\sqrt{D}$
+can introduce rounding that corrupts the floor.  The algorithm therefore uses
+$s = \lfloor\sqrt{D}\rfloor$, the integer square root computed exactly by
+\texttt{math.isqrt}, and evaluates \texttt{(m + s) // d} in Python, where
+\texttt{//} always rounds toward $-\infty$.
+
+\emph{Case $d > 0$: no correction needed.}
+Let $a = \lfloor(m+s)/d\rfloor$, so $ad \leq m + s < (a+1)d$ (integer
+inequalities).  We claim $a = \lfloor(m + \sqrt{D})/d\rfloor$:
+\begin{itemize}
+  \item \emph{Upper bound.} From $(a+1)d > m+s$ and integrality,
+        $(a+1)d - m \geq s+1$.  Since $\sqrt{D}$ is irrational,
+        $\sqrt{D} < s+1$, so $(a+1)d - m > \sqrt{D}$, giving
+        $(m + \sqrt{D})/d < a+1$.
+  \item \emph{Lower bound.} $ad \leq m+s$ gives $ad - m \leq s < \sqrt{D}$,
+        so $(m + \sqrt{D})/d > a$.
+\end{itemize}
+Combining, $a = \lfloor(m + \sqrt{D})/d\rfloor$ exactly.
+
+\emph{Case $d < 0$: the candidate may overshoot by exactly one.}
+Dividing by a negative number reverses the inequality $s < \sqrt{D}$,
+giving $(m+s)/d > (m+\sqrt{D})/d$.  The two dividends differ by the positive
+amount $(\sqrt{D} - s)/|d|$; since $\sqrt{D} - s \in (0,1)$, this difference
+lies in $(0,1)$, so the floors of the two expressions can differ by at most
+$1$: the candidate $a_{\mathrm{cand}} = \lfloor(m+s)/d\rfloor$ may exceed the
+true floor $a^*$ by at most $1$.
+
+To determine whether the overshoot occurs, define the \emph{tentative next
+numerator} $m_1(a) = a \cdot d - m$, the value $m_{n+1}$ would take if $a$
+were used as the partial quotient.  The two candidates are separated by an
+if-and-only-if criterion:
+\[
+  a = a^*
+  \quad\Longleftrightarrow\quad
+  m_1(a) > \sqrt{D}. \tag{$\star$}
+\]
+\begin{itemize}
+  \item[$({\Rightarrow})$] The floor definition with $d < 0$ reverses to
+    $a^*d \geq m + \sqrt{D} > (a^*+1)d$.  The left inequality gives
+    $m_1(a^*) \geq \sqrt{D}$; since $m_1(a^*)$ is an integer and $\sqrt{D}$
+    is irrational, $m_1(a^*) > \sqrt{D}$.
+  \item[$({\Leftarrow})$] Since the candidate lies in $\{a^*, a^*+1\}$, it
+    suffices to show $m_1(a^*+1) \leq \sqrt{D}$.  The right inequality
+    $(a^*+1)d < m + \sqrt{D}$ gives $m_1(a^*+1) < \sqrt{D}$; as
+    $m_1(a^*+1)$ is an integer, $m_1(a^*+1) \leq s$.  So $m_1(a) > \sqrt{D}$
+    rules out $a = a^*+1$, forcing $a = a^*$.
+\end{itemize}
+A sharper observation: the overshoot condition
+$\lfloor(m+s)/d\rfloor = a^*+1$ means (multiplying the floor inequality by
+$d < 0$) that $m_1(a^*+1) \geq s$, and combined with $m_1(a^*+1) \leq s$
+from above:
+\[
+  a_{\mathrm{cand}} = a^*+1 \;\Longleftrightarrow\;
+  m_1(a_{\mathrm{cand}}) = s \quad\text{(exactly)}.
+\]
+The correct case has $m_1 \geq s+1 > s$; the overshoot case has $m_1 = s$.
+The code therefore checks \texttt{d < 0 and (a*d - m) <= s} and decrements
+by~$1$ if the condition fires; the ${\leq}\,s$ form is the natural integer
+transcription of the strict irrational bound $m_1 < \sqrt{D}$.
+
+\emph{After the first step, $d$ is always positive.}
+When $d_0 = Q < 0$, the correct $a_0^*$ satisfies $m_1(a_0^*) > \sqrt{D}$,
+so $m_1^2 > D$, giving
+$d_1 = (D - m_1^2)/d_0 = (\text{negative})/(\text{negative}) > 0$.
+All subsequent denominators are positive, so the $d < 0$ branch is entered
+at most once over the entire execution.
+
+\paragraph{Stage 3: period detection.}
+Once $d_n > 0$ is established for all $n \geq 1$, we bound the state space
+of pairs $(m_n, d_n)$.
+
+\emph{Bounds on $m_{n+1}$ and $d_{n+1}$.}
+The fractional part $x_n - a_n \in (0,1)$ gives, with
+$x_n = (m_n + \sqrt{D})/d_n$ and $d_n > 0$:
+\[
+  0 < \frac{\sqrt{D} - m_{n+1}}{d_n} < 1
+  \;\Longrightarrow\;
+  \sqrt{D} - d_n < m_{n+1} < \sqrt{D}.
+\]
+The right inequality gives $m_{n+1} \leq s$ and $D - m_{n+1}^2 > 0$,
+confirming $d_{n+1} > 0$.  For the upper bound on $d_{n+1}$, factor
+$D - m_{n+1}^2 = (\sqrt{D} - m_{n+1})(\sqrt{D} + m_{n+1})$; the left
+inequality gives $d_n > \sqrt{D} - m_{n+1} > 0$, so dividing,
+\[
+  d_{n+1}
+  = \frac{(\sqrt{D} - m_{n+1})(\sqrt{D} + m_{n+1})}{d_n}
+  < \sqrt{D} + m_{n+1}
+  \leq 2\sqrt{D},
+\]
+bounding $d_{n+1}$ to at most $\lfloor 2\sqrt{D} \rfloor$ positive integer
+values.  Applying this bound to $d_n$ (inductively) and combining with the
+left inequality: $m_{n+1} > \sqrt{D} - d_n \geq \sqrt{D} - 2\sqrt{D} =
+-\sqrt{D}$, hence $m_{n+1} \geq -s$.  Altogether $|m_{n+1}| \leq s$,
+confining $m_{n+1}$ to at most $2s + 1$ integer values.
+
+The state space of pairs $(m_n, d_n)$ is therefore finite — at most
+$O(\sqrt{D}) \times O(\sqrt{D}) = O(D)$ states.  By the pigeonhole principle
+the sequence must eventually revisit a state: there exist $n > k \geq 0$
+with $(m_n, d_n) = (m_k, d_k)$, which implies $x_n = x_k$ and hence that
+all subsequent partial quotients repeat with period $n - k$.
+
+The algorithm records each state's first occurrence in the \texttt{visited}
+dictionary.  At the first revisit of $(m_k, d_k)$, the accumulated list
+$[a_0, a_1, \ldots, a_{n-1}]$ is split as:
+\begin{itemize}
+  \item Integer part: $a_0$;
+  \item Pre-period: $(a_1, \ldots, a_{k-1})$ (empty when $k \leq 1$);
+  \item Period: $(a_k, \ldots, a_{n-1})$.
+\end{itemize}
+The period is minimal because the loop halts at the \emph{first} revisit:
+any shorter repeating block would imply an earlier recurrence of
+$(m_k, d_k)$, contradicting the minimality of $k$.
+
+Finally, note that $a_n \geq 1$ for all $n \geq 1$: since
+$x_{n+1} = 1/(x_n - a_n)$ and $x_n - a_n \in (0,1)$, we have $x_{n+1} > 1$,
+so $a_{n+1} = \lfloor x_{n+1}\rfloor \geq 1$.  All body partial quotients
+are therefore positive integers, as required by the SCF definition.
+
+\begin{catenadef}[\texttt{from\_quadratic\_surd\_to\_scf} and \texttt{from\_quadratic\_surd}]
+\begin{lstlisting}[style=python]
+from catena.mathlib.convert import from_quadratic_surd_to_scf
+from catena import PeriodicSimpleContinuedFraction as PSCF
+
+# (1 + sqrt(5))/2  =  [1; 1,1,1,...]
+from_quadratic_surd_to_scf(1, 2, 5)    # (1, (), (1,))
+
+# Conjugate of phi: (-1 + sqrt(5))/(-2)  ~  -0.618
+from_quadratic_surd_to_scf(-1, -2, 5)  # (-1, (), (1,))
+
+# Eventually periodic: (7 + sqrt(10))/4
+from_quadratic_surd_to_scf(7, 4, 10)   # (2, (1, 1), (5, 1, 1, 1, 24, 1, 1, 1))
+
+# from_quadratic_surd wraps the above and returns a PSCF directly
+phi = PSCF.from_quadratic_surd(1, 2, 5)
+phi.integer_part       # 1
+phi.period             # (1,)
+\end{lstlisting}
+\end{catenadef}
+
+\subsubsection{Recovering a quadratic surd from a PSCF}
+\label{subsubsec:pscf-to-surd}
+
+The inverse direction is implemented by \texttt{quadratic\_coefficients()} and
+\texttt{quadratic\_surd()}.  The two steps are: derive the minimal polynomial
+from the periodic structure, then identify which root of that polynomial the
+PSCF represents.
+
+\paragraph{Step 1: quadratic coefficients from the periodic structure.}
+Consider first a PSCF with integer part zero and a purely periodic body
+$(c_0, c_1, \ldots, c_{r-1}, c_0, c_1, \ldots)$.  Its value
+$y = [0;\,\overline{c_0, \ldots, c_{r-1}}]$ is a \emph{fixed point} of the
+M\"obius transformation obtained by composing the $r$ elementary maps
+$t \mapsto c_j + 1/t$.  Concretely, writing $p_k/q_k$ for the $k$-th
+convergent of the finite SCF $[0;\,c_0, \ldots, c_{r-1}]$ (with the standard
+initialisation $p_{-1} = 1$, $p_0 = 0$, $q_{-1} = 0$, $q_0 = 1$), the
+standard evaluation formula gives
+\[
+  [0;\,c_0,\ldots,c_{r-1},\,t] = \frac{p_{r-1}\,t + p_{r-2}}{q_{r-1}\,t + q_{r-2}}.
+\]
+Since $y = [0;\,c_0,\ldots,c_{r-1},\,y]$ (the body repeats from position $0$),
+setting $t = y$ and clearing denominators yields
+\[
+  q_{r-1}\,y^2 + (q_{r-2} - p_{r-1})\,y - p_{r-2} = 0.
+\]
+The denominators $q_k$ of convergents are strictly positive, so
+$A = q_{r-1} > 0$ holds without any sign correction; the
+$\operatorname{sign}(A)$ normalisation is included only for robustness.
+
+For a PSCF with a non-empty pre-period $(d_0, \ldots, d_{m-1})$, the
+periodic tail $z = [0;\,\overline{c_0,\ldots,c_{r-1}}]$ satisfies the
+quadratic above, while the full body value
+$y = [0;\,d_0,\ldots,d_{m-1},z]$ is a M\"obius image of $z$ through the
+pre-period convergents.  Since M\"obius transformations send quadratic
+irrationals to quadratic irrationals, $y$ satisfies a (generally different)
+quadratic with integer coefficients.
+
+\texttt{PeriodicGenerator.quadratic\_coefficients()} computes the relevant
+convergents, forms $A = q_{r-1}$, $B = q_{r-2} - p_{r-1}$,
+$C = -p_{r-2}$ (for the purely periodic case), divides through by
+$\gcd(A, B, C)$ to obtain the primitive polynomial, and multiplies by
+$\operatorname{sign}(A)$ to enforce $A > 0$.
+
+When the PSCF has integer part $a_0 \neq 0$, the full value $x = y + a_0$
+satisfies the shifted polynomial with
+\[
+  A' = A, \quad B' = B - 2A a_0, \quad C' = C - B a_0 + A a_0^2,
+\]
+as derived in the remark following Definition~\ref{def:quadratic-coefficients}.
+
+\paragraph{Step 2: principal root extraction.}
+Given the canonical triple $(A, B, C)$ with $A > 0$, the principal root is
+\[
+  x_+ = \frac{-B + \sqrt{B^2 - 4AC}}{2A} = \frac{P + \sqrt{D}}{Q},
+  \qquad P = -B,\; Q = 2A,\; D = B^2 - 4AC.
+\]
+Since $A > 0$ we have $Q > 0$, so $x_+$ is always the larger of the two roots.
+
+\paragraph{Step 3: root disambiguation.}
+Step~2 always produces the principal-root parameters $(P, Q, D)$ with $Q > 0$,
+because the quadratic formula with $A > 0$ selects the $+\sqrt{D}$ branch.
+However, a given PSCF may represent the \emph{conjugate} root.  To decide
+which, \texttt{quadratic\_surd()} calls
+\texttt{from\_quadratic\_surd\_to\_scf}$(P, Q, D)$ to re-expand the principal
+root into its PSCF form and then compares the result with the stored integer
+part, pre-period, and period.
+
+The comparison is sound because \texttt{from\_quadratic\_surd\_to\_scf} is
+deterministic: given $(P, Q, D)$ it always produces the unique PSCF
+representation of the value $(P + \sqrt{D})/Q$.  If the re-expansion matches
+the stored PSCF, the stored PSCF \emph{is} the principal root and $(P, Q, D)$
+is returned unchanged.  If it does not match, the stored PSCF is the conjugate
+root $(P - \sqrt{D})/Q = (-P + \sqrt{D})/(-Q)$, so $(-P, -Q, D)$ is returned,
+with $-Q < 0$ signalling the conjugate in accordance with
+Definition~\ref{def:principal-conjugate}.
+
+\begin{remark}[Consistency of the round-trip]
+  The two algorithms are inverses of each other up to simplification:
+  \begin{itemize}
+    \item \texttt{from\_quadratic\_surd}$(P, Q, D)$ followed by
+          \texttt{quadratic\_surd()} returns the simplified form
+          (Definition~\ref{def:simplified-surd}) of $(P, Q, D)$ — or its
+          negation $(-P, -Q, D)$ if the input represented the conjugate root.
+    \item \texttt{quadratic\_surd()} followed by
+          \texttt{from\_quadratic\_surd} reconstructs the original PSCF
+          exactly.
+  \end{itemize}
+  In particular, \texttt{quadratic\_surd()} always returns a simplified triple,
+  while \texttt{from\_quadratic\_surd} accepts any triple and normalizes
+  internally before running the expansion loop.
+\end{remark}
+
+
 \subsection{Inherited and additional methods}
 
 \texttt{PeriodicSimpleContinuedFraction} inherits all of
@@ -159,7 +961,10 @@ The following members are added or overridden by the class.
     Read-only properties returning the pre-period
     $(g_{\mathrm{pre}}(0),\ldots,g_{\mathrm{pre}}(m-1))$ and the period
     $(g_{\mathrm{per}}(0),\ldots,g_{\mathrm{per}}(r-1))$ as immutable
-    tuples.
+    tuples. As it forces the entire pre-period and period to be 
+    materialized in memory as a new tuple, this may prove expensive for large periods; 
+    users should prefer the generator methods \texttt{pre\_period\_generator} and 
+    \texttt{period\_generator} for large bodies.
 
   \item[\texttt{from\_quadratic\_surd(P, Q, D)}]
     Class method.  Constructs a PSCF whose value is $(P + \sqrt{D})/Q$ by
@@ -169,26 +974,24 @@ The following members are added or overridden by the class.
     \texttt{conjugate}.
 
   \item[\texttt{\_\_float\_\_} (override)]
-    Returns \texttt{(P + D**0.5) / Q} from the cached
-    \texttt{quadratic\_surd()} triple.  Unlike
-    \texttt{SimpleContinuedFraction.\_\_float\_\_}, which evaluates
-    \texttt{convergent(50)}, the periodic override is exact up to
-    IEEE\,754 rounding in a single arithmetic expression, exploiting the
-    closed-form surd representation.
+    Evaluates the algebraic formula \texttt{(P + D**0.5) / Q} using the
+    cached \texttt{quadratic\_surd()} triple and Python's built-in float
+    arithmetic for $\sqrt{D}$.  In contrast, the base
+    \texttt{SimpleContinuedFraction.\_\_float\_\_} approximates via the
+    50th convergent (a heuristic chosen for 64-bit float precision), and
+    \texttt{FiniteSimpleContinuedFraction.\_\_float\_\_} uses the exact
+    terminal convergent.  The periodic override avoids convergent
+    evaluation entirely by exploiting the closed-form surd.
 
   \item[\texttt{as\_decimal()}]
-    Returns the value as an arbitrary-precision \texttt{Decimal} via
-    \texttt{Decimal(D).sqrt()}.  This is the periodic analogue of
-    \texttt{FiniteSimpleContinuedFraction.to\_decimal()}: both are exact
-    up to the current \texttt{decimal} context precision, but here
-    exactness comes from the algebraic form rather than from evaluating the
-    terminal convergent.
+    Returns the value as an arbitrary-precision \texttt{Decimal} by
+    evaluating \texttt{(Decimal(P) + Decimal(D).sqrt()) / Decimal(Q)}
+    from the cached \texttt{quadratic\_surd()} triple.  Precision is
+    limited only by the active \texttt{decimal} context.  The periodic
+    analogue of \texttt{FiniteSimpleContinuedFraction.to\_decimal()},
+    which evaluates the exact terminal convergent as a rational; here the
+    equivalent exactness comes from the algebraic form.
 \end{description}
-
-The following new methods are also implemented but their correctness rests on
-algebraic properties of quadratic irrationals that are not developed in
-this version of the document.  They are listed here for completeness;
-full justification is deferred to a forthcoming section.
 
 \begin{description}[leftmargin=2em, style=nextline]
   \item[\texttt{quadratic\_coefficients()}]
@@ -201,8 +1004,9 @@ full justification is deferred to a forthcoming section.
     Predicates distinguishing the two roots of the minimal polynomial,
     identified by the sign of $Q$.
   \item[\texttt{inverse()} (override)]
-    Returns $1/x$ as a new PSCF, computed via the surd formula.  Overrides
-    the base-class implementation to exploit the closed form; the
+    Returns $1/x$ as a new PSCF.  The result is a root of the \emph{reflected
+    polynomial} (Lemma~\ref{lem:reflected-poly}); see
+    Remark~\ref{rem:four-surds} for the four-object family.  The
     write-once involution contract (\texttt{\_inverse.\_inverse is self})
     is preserved.
   \item[\texttt{conjugate()}]

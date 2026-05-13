@@ -561,6 +561,7 @@ if __name__ == "__main__":
 
     # for i in range(10):
     #     print(f"{i}-th partial quotient of e: {catena.constants.e.generator(i)}")
+<<<<<<< HEAD
     
     r = catena.numbers.randoms.GaussKuzminSCF().scf(5, 4)
     n = -r
@@ -568,3 +569,44 @@ if __name__ == "__main__":
     print(float(n), n)
     print(float(n.inverse()), n.inverse())
     print(1/float(n))
+=======
+    # seed = catena.numbers.randoms.Seed(42)
+    # # random scf
+    # for i in range(100):
+    #     r = print(catena.numbers.randoms.GaussKuzminSCF().periodic_scf(5, 4))
+
+    # r = catena.numbers.randoms.GaussKuzminSCF().periodic_scf(5, 4)
+
+    # print(r)
+    # print()
+    # print(r.inverse().conjugate())
+    # print(r.conjugate().inverse())
+
+    # q = catena.PeriodicSimpleContinuedFraction.from_quadratic_surd(1, 1, 2)
+    # print(q.quadratic_surd())
+    # print(q.is_principal_surd())
+    # q_inv = q.inverse()
+    # print(q_inv.quadratic_surd())
+    # print(q_inv.is_principal_surd())
+
+    # p = catena.PeriodicSimpleContinuedFraction.from_quadratic_surd(5, 1, 7)
+    # print(p.quadratic_surd())
+    # print(p.is_principal_surd())
+    # p_inv = p.inverse()
+    # print(p_inv.quadratic_surd())
+    # print(p_inv.is_principal_surd())
+
+    for P in range(-15, 16):
+        for Q in range(-15, 16):
+            if Q == 0:
+                continue
+            for D in range(1, 20):
+                if isqrt(D)**2 == D:
+                    continue
+                print(f"\nTesting with P={P}, Q={Q}, D={D}:")
+                result = catena.PeriodicSimpleContinuedFraction.from_quadratic_surd(P, Q, D)
+                print(f"Result: {result}")
+                print(f"Quadratic surd form: {result.quadratic_surd()}")
+
+    #print(catena.PeriodicSimpleContinuedFraction.from_quadratic_surd(-15, -6, 10))
+>>>>>>> docs

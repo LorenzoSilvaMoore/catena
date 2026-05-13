@@ -209,8 +209,8 @@ def from_quadratic_surd_to_scf(P: int, Q: int, D: int):
 
     m, d = P, Q
     a = (m + s) // d
-    if (m0:=(a * d - m)) > 0 and (d0:=(D - m0 * m0) // d) < 0: # This is a logic step to avoid the 
-        a -= 1                                                  # need to use floating point approximation for s.
+    if d < 0 and (a * d - m) <= s:# This is a logic step to avoid the 
+        a -= 1                    # need to use floating point approximation for s.
     
     visited = dict()
     scf = []
@@ -221,8 +221,7 @@ def from_quadratic_surd_to_scf(P: int, Q: int, D: int):
         m = a * d - m
         d = (D - m * m) // d
         a = (m + s) // d
-
-        if (m0:=(a * d - m)) > 0 and (d0:=(D - m0 * m0) // d) < 0:
+        if d < 0 and (a * d - m) <= s:
             a -= 1
 
     return scf[0], tuple(scf[1:visited[(m, d)]]), tuple(scf[visited[(m, d)]:])
