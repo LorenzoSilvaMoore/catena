@@ -58,22 +58,6 @@ import catena.mathlib as mathlib
 #             p, q = Method.simplify(p*n - q, q*n)
 #         lst.append(q * sign)
 #         return lst
-    
-#     @staticmethod
-#     def compress_body(body: Sequence[int]) -> list[int]:
-#         compressed = []
-#         i, l = 0, len(body)
-#         while i < l:
-#             if i < l - 1 and body[i] == 0 and body[i + 1] == 0:
-#                 i += 2 
-#             else:
-#                 compressed.append(body[i])
-#                 i += 1
-
-#         if len(compressed) > 2 and compressed[-1]==1:
-#             compressed[-2] += 1
-#             return compressed[:-1]
-#         return compressed
 
 
 # class StringMethod:
@@ -150,13 +134,6 @@ import catena.mathlib as mathlib
 
 # class FinateSimpleContinuedFraction:
 #    
-    
-#     def convergent_as_float(self, n: Optional[int]=None) -> IntPair:
-#         if n is None:
-#             n = self.size - 1
-
-#         convergent = self.convergent(n)
-#         return convergent[0] + self.head * convergent[1], convergent[1]
     
 #     def convergent_as_digits(self, n: Optional[int]=None, d: Optional[int]=None) -> float:
 #         if n is None:
@@ -451,6 +428,7 @@ class SimpleContinuedFraction:
         """
         if not isinstance(n, int):
             return NotImplemented
+        
         return self.shift(n)
 
     def __radd__(self, n: int) -> 'SimpleContinuedFraction':
@@ -459,11 +437,9 @@ class SimpleContinuedFraction:
 
         Returns :data:`NotImplemented` if ``n`` is not an ``int``.
         """
-        if not isinstance(n, int):
-            return NotImplemented
-        return self.shift(n)
+        return self.__add__(n)
     
-    def __float__(self):
+    def __float__(self) -> float:
         """
         Converts the SCF to a float by evaluating the 50-th convergent.
 
@@ -476,7 +452,7 @@ class SimpleContinuedFraction:
         p, q = self.convergent(50)
         return p / q
     
-    def __neg__(self):
+    def __neg__(self) -> 'SimpleContinuedFraction':
         """
         Returns the additive inverse of the SCF, i.e., a new SCF representing -x if self represents x.
         """
@@ -814,7 +790,7 @@ class FiniteSimpleContinuedFraction(SimpleContinuedFraction):
 
         return NotImplemented
 
-    def __float__(self):
+    def __float__(self) -> float:
         """Returns the value of the terminal convergent as a Python ``float``."""
         tc = self.terminal_convergent
         return tc[0]/tc[1]
@@ -1048,13 +1024,13 @@ class PeriodicSimpleContinuedFraction(SimpleContinuedFraction):
         """The repeating partial quotients ``(b₁, b₂, …, bₙ)`` as an immutable tuple."""
         return tuple(self.generator.period)
     
-    def __str__(self):
+    def __str__(self) -> str:
         return f"PeriodicSimpleContinuedFraction(non_repeating_part={self.non_repeating_part}, period={self.period}, integer_part={self.integer_part})"
     
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"PeriodicSimpleContinuedFraction(generator={self.generator}, integer_part={self.integer_part}, cache_handler={self.cache_handler})"
     
-    def __float__(self):
+    def __float__(self) -> float:
         """Returns the value of the SCF as a Python ``float``."""
         P, Q, D = self.quadratic_surd()
         return (P + D**0.5)/Q
