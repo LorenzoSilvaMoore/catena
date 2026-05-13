@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "catena-scf"
-version = "0.4.1"
+version = "0.4.2"
 authors = [
   { name = "Lorenzo Silva Moore", email = "lorenzosilvamoore@ciencias.unam.mx" },
 ]
@@ -22,6 +22,7 @@ license-files = ["LICEN[CS]E*"]
 [project.urls]
 Repository = "https://github.com/LorenzoSilvaMoore/catena"
 Issues = "https://github.com/LorenzoSilvaMoore/catena/issues"
+Documentation = "https://lorenzosilvamoore.github.io/catena/"
 
 [tool.hatch.build.targets.wheel]
 packages = ["catena"]

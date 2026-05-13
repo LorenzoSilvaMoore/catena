@@ -7,6 +7,48 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ---
 
+## [0.4.2] — 2026-05-13
+
+### Changed
+
+- `SimpleContinuedFraction.inverse()`: negative branch now stores the result in
+  `self._inverse` and sets `self._inverse._inverse = self`, satisfying the
+  write-once cache contract consistently across all three branches (a₀ < 0,
+  a₀ = 0, a₀ > 0).
+- `FiniteSimpleContinuedFraction.inverse()`: replaced Euclidean re-expansion
+  (`from_rational_to_scf` on the swapped pair) with a call to
+  `super().inverse()`.  When `self`'s terminal tail-convergent is already
+  cached, its value is transplanted into `inv`'s cache so that a subsequent
+  `inv.terminal_convergent` avoids recomputing the full recurrence.
+- `OrdinalCache.__init__`: added explicit `*args: object` / `**kwargs: object`
+  type annotations.
+- `SetCache`, `SetLightCache`: added `-> Callable` return-type annotation.
+
+### Fixed
+
+- Docstring formatting: fixed `Args:` continuation indent in
+  `FiniteSimpleContinuedFraction.segment()` and both `Generator.insert()` /
+  `PeriodicGenerator.insert()` overloads; replaced invalid `Raises: None.`
+  with a `Note:` section in `normalize_quadratic_surd()`.
+
+### Documentation
+
+- New hosted API reference and examples at
+  <https://lorenzosilvamoore.github.io/catena/> (MkDocs + Material theme,
+  auto-deployed on push to `main` via GitHub Actions).
+- `docs/from_quadratic_surd_to_scf.md` moved to
+  `docs/theory/from_quadratic_surd_to_scf.md`.
+
+### Tests
+
+- 10 new inverse identity-caching tests across `test_scf.py`,
+  `test_finite_scf.py`, and `test_periodic_scf.py`, covering all three
+  branches (a₀ = 0, a₀ > 0, a₀ < 0) for all three SCF types.
+- 5 new cache-seeding correctness tests for `FiniteSimpleContinuedFraction.inverse()`
+  with pre-warmed caches (a₀ = 0 size-2/3, a₀ > 0 size-1/2, double-inverse).
+
+---
+
 ## [0.4.1] — 2026-05-12
 
 ### Fixed
