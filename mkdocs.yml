@@ -1,0 +1,21 @@
+site_name: catena
+theme:
+  name: material
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            docstring_style: google   # or numpy — matches your current style
+nav:
+  - Home: index.md
+  - Examples: examples.md
+  - API Reference:
+      - catena: api/catena.md
+      - generators: api/generators.md
+      - cache: api/cache.md
+      - mathlib: api/mathlib.md
+  - Theory:
+      - catena: theory/theory.md
+      - catena.mathlib.convert.from_quadratic_surd_to_scf: theory/from_quadratic_surd_to_scf.md

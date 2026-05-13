@@ -1,0 +1,3 @@
+# catena.generators
+
+::: catena.generators
