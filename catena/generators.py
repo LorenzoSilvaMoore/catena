@@ -93,12 +93,12 @@ class Generator(Callable):
 
         Args:
             fg (FiniteGenerator): The generator to insert.
-            at (int): The non-negative index at which to insert the new generator.  
-            The first term of ``fg`` will become the *at*-th term of the resulting sequence.
+            at (int): The non-negative index at which to insert the new generator.
+                The first term of ``fg`` will become the *at*-th term of the resulting sequence.
 
         Returns:
             Generator: A new generator that produces the combined sequence with ``fg`` inserted at the specified index.
-        
+
         Raises:
             ValueError: If ``at`` is negative.
             TypeError: If ``fg`` is not a :class:`FiniteGenerator`.
@@ -582,8 +582,8 @@ class PeriodicGenerator(Generator):
 
         Args:
             fg (FiniteGenerator): The generator to insert.
-            at (int): The non-negative index at which to insert the new generator.  
-            The first term of ``fg`` will become the *at*-th term of the resulting sequence.
+            at (int): The non-negative index at which to insert the new generator.
+                The first term of ``fg`` will become the *at*-th term of the resulting sequence.
 
         Returns:
             PeriodicGenerator: A new generator that produces the combined sequence with ``fg`` inserted at the specified index.

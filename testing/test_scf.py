@@ -652,6 +652,28 @@ def test_inverse_is_cached():
     assert inv1 is inv2
 
 
+def test_inverse_is_cached_a0_zero():
+    """a₀=0 (advance branch): repeated calls return the same object."""
+    scf = SimpleContinuedFraction(ones, integer_part=0)
+    inv1 = scf.inverse()
+    inv2 = scf.inverse()
+    assert inv1 is inv2
+
+
+def test_inverse_is_cached_negative():
+    """a₀<0 (negative branch): repeated calls return the same object."""
+    scf = SimpleContinuedFraction(ones, integer_part=-2)
+    inv1 = scf.inverse()
+    inv2 = scf.inverse()
+    assert inv1 is inv2
+
+
+def test_inverse_negative_roundtrip_is_self():
+    """a₀<0: (1/x)⁻¹ is the original object (identity caching on both sides)."""
+    scf = SimpleContinuedFraction(twos, integer_part=-1)
+    assert scf.inverse().inverse() is scf
+
+
 def test_inverse_write_once_protection():
     """Setting _inverse a second time raises AttributeError."""
     scf = SimpleContinuedFraction(ones, integer_part=1)

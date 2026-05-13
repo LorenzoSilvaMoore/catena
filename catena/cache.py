@@ -52,7 +52,7 @@ class OrdinalCache(Cache):
     range without iterating the dictionary.
     """
 
-    def __init__(self, *args, maxsize=None, **kwargs):
+    def __init__(self, *args: object, maxsize: int | None = None, **kwargs: object):
         """
         Initialises the ordinal cache.
 
@@ -191,7 +191,7 @@ class CacheHandler:
         return f"CacheHandler[{id(self)}] -> Cache[{id(self.cache)}] | Calls: {self.call_count}, Reads: {self.read_count}, Size: {len(self.cache)}"
     
 
-def SetCache(func: Callable = None, cache_handler: CacheHandler = None):
+def SetCache(func: Callable = None, cache_handler: CacheHandler = None) -> Callable:
     """
     Decorator / decorator-factory that memoises a function using a
     :class:`CacheHandler`.
@@ -216,8 +216,7 @@ def SetCache(func: Callable = None, cache_handler: CacheHandler = None):
             supplied.
 
     Returns:
-        Callable: The wrapped function (or a decorator if ``func`` is
-        ``None``).
+        Callable: The wrapped function (or a decorator if ``func`` is ``None``).
     """
     if cache_handler is None:
         cache_handler = CacheHandler(Cache())
@@ -239,7 +238,7 @@ def SetCache(func: Callable = None, cache_handler: CacheHandler = None):
     return decorator(func)
 
 
-def SetLightCache(func: Callable = None, cache_handler: CacheHandler = None):
+def SetLightCache(func: Callable = None, cache_handler: CacheHandler = None) -> Callable:
     """
     A lighter variant of :func:`SetCache` for single-argument functions.
 
@@ -263,8 +262,7 @@ def SetLightCache(func: Callable = None, cache_handler: CacheHandler = None):
             supplied.
 
     Returns:
-        Callable: The wrapped function (or a decorator if ``func`` is
-        ``None``).
+        Callable: The wrapped function (or a decorator if ``func`` is ``None``).
     """
     if cache_handler is None:
         cache_handler = CacheHandler(Cache())

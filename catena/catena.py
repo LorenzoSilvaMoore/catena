@@ -598,9 +598,11 @@ class SimpleContinuedFraction:
             new_integer_part = 0
             new_generator = self.generator.prepend(FiniteGenerator([self.integer_part])) #lambda n: self.generator(n - 1) if n > 0 else self.integer_part
         else:
-            return -(-self).inverse() # Handle negative integer part by negating, inverting, and negating again to avoid complications with prepending negative integers.
-
-        self._inverse = SimpleContinuedFraction(generator=new_generator, integer_part=new_integer_part)
+            self._inverse = -(-self).inverse() # Handle negative integer part by negating, inverting, and negating again to avoid complications with prepending negative integers.
+            self._inverse._inverse = self
+            return self._inverse
+        
+        self._inverse = type(self)(new_generator, integer_part=new_integer_part)
         self._inverse._inverse = self   # Cache the inverse of the inverse as the original SCF
         return self._inverse            # Make .inverse idempotent pair-wise while avoiding unecessary cloning.
     
@@ -912,14 +914,31 @@ class FiniteSimpleContinuedFraction(SimpleContinuedFraction):
         if hasattr(self, '_inverse'):
             return self._inverse
         
-        tc = self.terminal_convergent
-        if tc[0] == 0:
+        if self.size == 0 and self.integer_part == 0:
             raise ZeroDivisionError("Cannot invert a zero value")
         
-        r = mathlib.convert.from_rational_to_scf((tc[1], tc[0]))  # Invert the terminal convergent
-        self._inverse = FiniteSimpleContinuedFraction(partial_quotients=r[1], integer_part=r[0]) # This is necessary to have all internal attributes properly set for the inverse.
-        self._inverse._inverse = self 
-        return self._inverse
+        inv = super().inverse()
+        # Seed inv's terminal tail convergent from self's cache to avoid
+        # recomputing the full recurrence when inv.terminal_convergent is
+        # called later.  Only runs when self's cache already reaches the
+        # terminal entry (largest_key == size - 1).
+        if self.cache_handler.cache.largest_key == self.size - 1:
+            if self.integer_part == 0 and self.size > 0:
+                # inv = [a₁; a₂, …, aₙ]  (advance by 1, inv.size = n-1)
+                # inv.tail_convergent(n-2) = (k_{n-1} - a₁·h_{n-1},  h_{n-1})
+                ttc = self.tail_convergent(self.size - 1)   # free – already cached
+                a1 = self.generator(0)
+                inv.cache_handler.cache[inv.size - 1] = (ttc[1] - a1 * ttc[0], ttc[0])
+            elif self.integer_part > 0 and self.size > 0:
+                # inv = [0; a₀, a₁, …, aₙ]  (prepend a₀, inv.size = n+1)
+                # inv.tail_convergent(n) = (k_{n-1},  h_{n-1})  = (tc[1], tc[0])
+                tc = self.terminal_convergent               # free – already cached
+                inv.cache_handler.cache[inv.size - 1] = (tc[1], tc[0])
+
+        else:
+            pass # for the negative case, the logic -(-self).inverse() passes the paths above as well.
+
+        return inv  # Use the general inversion logic from SimpleContinuedFraction, which will handle caching and inverse of inverse correctly. The terminal convergent will be inverted correctly by the logic in SimpleContinuedFraction.inverse().
     
     @override
     def segment(self, n: int) -> 'FiniteSimpleContinuedFraction':
@@ -932,8 +951,8 @@ class FiniteSimpleContinuedFraction(SimpleContinuedFraction):
         ``partial_quotients = (self.generator(0), self.generator(1), …, self.generator(n-1))``.
 
         Args:
-            n (int): The number of partial quotients to include in the segment. If ``n >= size``, 
-            the entire SCF is returned without truncation.
+            n (int): The number of partial quotients to include in the segment.
+                If ``n >= size``, the entire SCF is returned without truncation.
 
         Returns:
             FiniteSimpleContinuedFraction: A finite SCF segment of the first

@@ -29,6 +29,10 @@ docs/BIBLIOGRAPHY.md
 docs/BIBLIOGRAPHY_PYTHON.md
 
 
+# mkdocs
+site/
+
+
 # misc
 gitdiff.txt
 gitlog.txt

@@ -254,12 +254,16 @@ form.
 Note the design difference from the parent class:
 \texttt{SimpleContinuedFraction.inverse()} manipulates the generator directly
 (prepending $a_0$ or shifting the index), which is appropriate when the
-generator is infinite.  For a finite SCF it is preferable to invert the
-terminal fraction $p/q \mapsto q/p$ and run the Euclidean algorithm again. 
-\catena chooses this second path: \texttt{FiniteSimpleContinuedFraction.inverse()}
-calls \texttt{from\_rational\_to\_scf} on the swapped pair $(q, p)$, so the
-result is always in canonical form. The inverse is memoised (write-once
-cache) so that calling \texttt{inverse()} twice returns the original object.
+generator is infinite.  \texttt{FiniteSimpleContinuedFraction.inverse()}
+delegates to this same parent-class logic, so the result is always in
+canonical form without re-running the Euclidean algorithm (provided 
+the original SCF is in canonical form).  As an additional
+optimisation, if the terminal tail convergent is already cached on \texttt{self}
+at the time of the call, its value is transplanted into the inverse's
+convergent cache, so that a subsequent call to
+\texttt{inv.terminal\_convergent} avoids recomputing the full recurrence.  The
+inverse reference is memoised (write-once cache) so that calling \texttt{inverse()}
+twice returns the original object.
 
 \begin{catenadef}[\texttt{FiniteSimpleContinuedFraction.inverse}]
 \begin{lstlisting}[style=python]

@@ -52,9 +52,9 @@ def normalize_quadratic_surd(P: int, Q: int, D: int) -> tuple[int, int, int]:
         tuple[int, int, int]: ``(P', Q', D')`` such that ``(P' + √D') / Q'`` is 
         the normalized form of the original surd.
 
-    Raises:
-        None. No typechecking is performed on the input, but the function assumes that 
-        the input is a valid quadratic surd, i.e. that Q is non-zero and that D is non-negative.
+    Note:
+        No typechecking is performed on the input.  The function assumes that
+        ``Q`` is non-zero and ``D`` is non-negative.
     """
     t = abs(D - P**2) # We most preserve the sign of the input.
     l = lcm(Q, t)

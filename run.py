@@ -95,6 +95,10 @@ def find_plateau_order(fscf: catena.FiniteSimpleContinuedFraction) -> int:
     return -1  # Return -1 if no plateau is found within the first 1000 convergents
 
 
+def _make_fscf(pqs: tuple, a0: int = 0) -> catena.FiniteSimpleContinuedFraction:
+    return catena.FiniteSimpleContinuedFraction(pqs, integer_part=a0)
+
+
 if __name__ == "__main__":
     # sqer(14) = [3; 1, 2, 1, 6, 1, 2, 1, 6, ...]
     # cycle = (1,2,1,6)
@@ -561,15 +565,13 @@ if __name__ == "__main__":
 
     # for i in range(10):
     #     print(f"{i}-th partial quotient of e: {catena.constants.e.generator(i)}")
-<<<<<<< HEAD
     
-    r = catena.numbers.randoms.GaussKuzminSCF().scf(5, 4)
-    n = -r
-    print(float(r), r)
-    print(float(n), n)
-    print(float(n.inverse()), n.inverse())
-    print(1/float(n))
-=======
+    # r = catena.numbers.randoms.GaussKuzminSCF().scf(5, 4)
+    # n = -r
+    # print(float(r), r)
+    # print(float(n), n)
+    # print(float(n.inverse()), n.inverse())
+    # print(1/float(n))
     # seed = catena.numbers.randoms.Seed(42)
     # # random scf
     # for i in range(100):
@@ -596,17 +598,20 @@ if __name__ == "__main__":
     # print(p_inv.quadratic_surd())
     # print(p_inv.is_principal_surd())
 
-    for P in range(-15, 16):
-        for Q in range(-15, 16):
-            if Q == 0:
-                continue
-            for D in range(1, 20):
-                if isqrt(D)**2 == D:
-                    continue
-                print(f"\nTesting with P={P}, Q={Q}, D={D}:")
-                result = catena.PeriodicSimpleContinuedFraction.from_quadratic_surd(P, Q, D)
-                print(f"Result: {result}")
-                print(f"Quadratic surd form: {result.quadratic_surd()}")
+    # for P in range(-15, 16):
+    #     for Q in range(-15, 16):
+    #         if Q == 0:
+    #             continue
+    #         for D in range(1, 20):
+    #             if isqrt(D)**2 == D:
+    #                 continue
+    #             print(f"\nTesting with P={P}, Q={Q}, D={D}:")
+    #             result = catena.PeriodicSimpleContinuedFraction.from_quadratic_surd(P, Q, D)
+    #             print(f"Result: {result}")
+    #             print(f"Quadratic surd form: {result.quadratic_surd()}")
 
     #print(catena.PeriodicSimpleContinuedFraction.from_quadratic_surd(-15, -6, 10))
->>>>>>> docs
+
+
+    # r = catena.FiniteSimpleContinuedFraction.from_rational((7,3))
+    # print(r.terminal_convergent, r.inverse().terminal_convergent)

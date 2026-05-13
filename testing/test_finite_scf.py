@@ -1029,12 +1029,93 @@ def test_inverse_double_is_cached_original():
     assert scf.inverse().inverse() is scf
 
 
+def test_inverse_is_cached_a0_positive():
+    """a₀>0 (prepend branch): repeated calls return the same object."""
+    scf = FiniteSimpleContinuedFraction([7], integer_part=3)
+    inv1 = scf.inverse()
+    inv2 = scf.inverse()
+    assert inv1 is inv2
+
+
+def test_inverse_is_cached_a0_zero():
+    """a₀=0 (advance branch): repeated calls return the same object."""
+    scf = FiniteSimpleContinuedFraction([2, 3], integer_part=0)
+    inv1 = scf.inverse()
+    inv2 = scf.inverse()
+    assert inv1 is inv2
+
+
+def test_inverse_is_cached_negative():
+    """a₀<0 (negative branch): repeated calls return the same object."""
+    scf = FiniteSimpleContinuedFraction([3, 1, 4, 1], integer_part=-2)
+    inv1 = scf.inverse()
+    inv2 = scf.inverse()
+    assert inv1 is inv2
+
+
+def test_inverse_negative_roundtrip_is_self():
+    """a₀<0: (1/x)⁻¹ is the original object (identity caching on both sides)."""
+    scf = FiniteSimpleContinuedFraction([3, 1, 4, 1], integer_part=-2)
+    assert scf.inverse().inverse() is scf
+
+
 def test_inverse_zero_raises():
     scf = FiniteSimpleContinuedFraction([1], integer_part=0)   # 0 + 1/1 = 1? No: terminal = (1,1) not 0
     # The only finite SCF with value 0 is integer_part=0 and size=0.
     zero_scf = FiniteSimpleContinuedFraction([], integer_part=0)
     with pytest.raises(ZeroDivisionError):
         zero_scf.inverse()
+
+
+# ---------------------------------------------------------------------------
+# Cache-seeding correctness: inverse() when terminal_convergent is pre-cached
+#
+# The seeding code in FiniteSimpleContinuedFraction.inverse() tries to
+# transplant self's cached tail convergent into inv's cache.  These tests
+# trigger the seeding branches by calling terminal_convergent BEFORE inverse()
+# so the cache is already populated.  Without correct formulas the seeded
+# value corrupts inv.terminal_convergent via SetLightCache.
+# ---------------------------------------------------------------------------
+
+def test_inverse_correct_after_cache_warm_a0_zero_size2():
+    """a₀=0, size=2: [0;2,3]=3/7 → inverse must be 7/3 even when cache pre-populated."""
+    scf = FiniteSimpleContinuedFraction([2, 3], integer_part=0)
+    _ = scf.terminal_convergent          # warms cache; triggers seeding branch
+    inv = scf.inverse()
+    assert inv.terminal_convergent == (7, 3)
+
+
+def test_inverse_correct_after_cache_warm_a0_zero_size3():
+    """a₀=0, size=3: [0;2,3,5]=16/37 → inverse must be 37/16."""
+    scf = FiniteSimpleContinuedFraction([2, 3, 5], integer_part=0)
+    _ = scf.terminal_convergent          # warms cache; triggers seeding branch
+    inv = scf.inverse()
+    assert inv.terminal_convergent == (37, 16)
+
+
+def test_inverse_correct_after_cache_warm_a0_positive_size1():
+    """a₀>0, size=1: [3;7]=22/7 → inverse must be 7/22 even when cache pre-populated."""
+    scf = FiniteSimpleContinuedFraction([7], integer_part=3)
+    _ = scf.terminal_convergent          # warms cache; triggers seeding branch
+    inv = scf.inverse()
+    assert inv.terminal_convergent == (7, 22)
+
+
+def test_inverse_correct_after_cache_warm_a0_positive_size2():
+    """a₀>0, size=2: [3;2,5]=38/11 → inverse must be 11/38 even when cache pre-populated."""
+    scf = FiniteSimpleContinuedFraction([2, 5], integer_part=3)
+    _ = scf.terminal_convergent          # warms cache; triggers seeding branch
+    inv = scf.inverse()
+    assert inv.terminal_convergent == (11, 38)
+
+
+def test_inverse_double_correct_after_cache_warm():
+    """(1/x)⁻¹ == x holds even when caches are warm on both sides."""
+    scf = FiniteSimpleContinuedFraction([7, 16], integer_part=3)   # 355/113
+    _ = scf.terminal_convergent
+    inv = scf.inverse()
+    _ = inv.terminal_convergent
+    assert inv.inverse().terminal_convergent == scf.terminal_convergent
 
 # ===========================================================================
 # segment(n)

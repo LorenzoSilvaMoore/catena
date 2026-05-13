@@ -893,6 +893,28 @@ def test_pscf_inverse_is_cached():
     inv2 = pscf.inverse()
     assert inv1 is inv2
 
+
+def test_pscf_inverse_is_cached_a0_zero():
+    """a₀=0 (fractional branch): repeated calls return the same object."""
+    pscf = PeriodicSimpleContinuedFraction(period=[2], pre_period=[1], integer_part=0)
+    inv1 = pscf.inverse()
+    inv2 = pscf.inverse()
+    assert inv1 is inv2
+
+
+def test_pscf_inverse_is_cached_negative():
+    """a₀<0 (negative branch): repeated calls return the same object."""
+    pscf = PeriodicSimpleContinuedFraction(period=[2], integer_part=-1)
+    inv1 = pscf.inverse()
+    inv2 = pscf.inverse()
+    assert inv1 is inv2
+
+
+def test_pscf_inverse_negative_roundtrip_is_self():
+    """a₀<0: (1/x)⁻¹ is the original object (identity caching on both sides)."""
+    pscf = PeriodicSimpleContinuedFraction(period=[2], integer_part=-1)
+    assert pscf.inverse().inverse() is pscf
+
 # ===========================================================================
 # segment(n)
 # ===========================================================================
