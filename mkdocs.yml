@@ -1,6 +1,7 @@
 site_name: catena
 theme:
   name: material
+  custom_dir: docs/overrides
 plugins:
   - search
   - mkdocstrings:
