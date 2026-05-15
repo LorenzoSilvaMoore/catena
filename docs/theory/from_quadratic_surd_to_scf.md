@@ -7,6 +7,42 @@ surd $x_0 = (P + \sqrt{D})/Q$.
 
 ---
 
+## Raw code implementation
+
+```python
+def from_quadratic_surd_to_scf(P: int, Q: int, D: int):
+    if Q == 0:
+        raise ValueError("Q cannot be zero")
+    if D < 0:
+        raise ValueError("D must be non-negative")
+    
+    P, Q, D = normalize_quadratic_surd(P, Q, D)
+
+    if (s:=isqrt(D))**2 == D:
+        raise ValueError("D must not be a perfect square")
+    
+    m, d = P, Q
+    a = (m + s) // d
+    if d < 0 and (a * d - m) <= s:  # This is a logic step to avoid the 
+        a -= 1                      # need to use floating point approximation for s.
+    
+    visited = dict()
+    scf = []
+    while (m, d) not in visited:
+        visited[(m, d)] = len(scf)
+        scf.append(a)
+
+        m = a * d - m
+        d = (D - m * m) // d
+        a = (m + s) // d
+        if d < 0 and (a * d - m) <= s:
+            a -= 1
+
+    return scf[0], tuple(scf[1:visited[(m, d)]]), tuple(scf[visited[(m, d)]:])
+```
+
+---
+
 ## 1. Setup and Assumptions
 
 Throughout, we assume:
@@ -286,29 +322,54 @@ SCF definition.
 The full state of the recurrence at each step is the pair $(m_n, d_n)$, which
 determines $x_n$ and all subsequent complete quotients.
 
-**Bounds on $m_n$ (for $d_n > 0$).** The derivation in §3 shows
-$(\sqrt{D} - m_{n+1})/d_n = x_n - a_n \in (0,1)$, giving:
-
+**Bounds on $m_{n+1}$ and $d_{n+1}$.**
+The fractional part $x_n - a_n \in (0,1)$ gives, with
+$x_n = (m_n + \sqrt{D})/d_n$ and $d_n > 0$:
 $$
-  0 < \sqrt{D} - m_{n+1} < d_n \qquad (d_n > 0).
+  0 < \frac{\sqrt{D} - m_{n+1}}{d_n} < 1
+  \;\Longrightarrow\;
+  \sqrt{D} - d_n < m_{n+1} < \sqrt{D}.
 $$
-
-In particular $0 < m_{n+1} < \lceil\sqrt{D}\rceil$, so $m_{n+1}$ takes at most
-$\lceil\sqrt{D}\rceil$ integer values.
-
-**Bounds on $d_n$.** From $d_n d_{n+1} = D - m_{n+1}^2$ and
-$m_{n+1} \in (0, \sqrt{D})$, we get $D - m_{n+1}^2 \in (0, D)$, so
-
+The right inequality gives $m_{n+1} \leq s$ and $D - m_{n+1}^2 > 0$,
+confirming $d_{n+1} > 0$.  For the upper bound on $d_{n+1}$, factor
+$D - m_{n+1}^2 = (\sqrt{D} - m_{n+1})(\sqrt{D} + m_{n+1})$; the left
+inequality gives $d_n > \sqrt{D} - m_{n+1} > 0$, so dividing,
 $$
-  0 < d_{n+1} < \frac{D}{d_n}.
+  d_{n+1}
+  = \frac{(\sqrt{D} - m_{n+1})(\sqrt{D} + m_{n+1})}{d_n}
+  < \sqrt{D} + m_{n+1}
+  \leq 2\sqrt{D},
 $$
+bounding $d_{n+1}$ to at most $\lfloor 2\sqrt{D} \rfloor$ positive integer
+values.  Applying this bound to $d_n$ (inductively) and combining with the
+left inequality: $m_{n+1} > \sqrt{D} - d_n \geq \sqrt{D} - 2\sqrt{D} =
+-\sqrt{D}$, hence $m_{n+1} \geq -s$.  Altogether $|m_{n+1}| \leq s$,
+confining $m_{n+1}$ to at most $2s + 1$ integer values.
 
-A classical argument (see e.g. Hardy & Wright, §10.11) gives the tighter bound
-$d_{n+1} < 2\sqrt{D}$ in the purely periodic regime, so there are at most
-$O(\sqrt{D}) \times O(\sqrt{D}) = O(D)$ distinct states.
+The state space of pairs $(m_n, d_n)$ is therefore finite — at most
+$O(\sqrt{D}) \times O(\sqrt{D}) = O(D)$ states.  By the pigeonhole principle
+the sequence must eventually revisit a state: there exist $n > k \geq 0$
+with $(m_n, d_n) = (m_k, d_k)$, which implies $x_n = x_k$ and hence that
+all subsequent partial quotients repeat with period $n - k$.
 
-By the **pigeonhole principle**, the sequence $(m_n, d_n)$ must eventually revisit
-a state, at which point the SCF becomes periodic and the loop terminates.
+The algorithm records each state's first occurrence in the \texttt{visited}
+dictionary.  At the first revisit of $(m_k, d_k)$, the accumulated list
+$[a_0, a_1, \ldots, a_{n-1}]$ is split as:
+
+  1. Integer part: $a_0$;
+
+  2. item Pre-period: $(a_1, \ldots, a_{k-1})$ (empty when $k \leq 1$);
+
+  3. item Period: $(a_k, \ldots, a_{n-1})$.
+
+The period is minimal because the loop halts at the \emph{first} revisit:
+any shorter repeating block would imply an earlier recurrence of
+$(m_k, d_k)$, contradicting the minimality of $k$.
+
+Finally, note that $a_n \geq 1$ for all $n \geq 1$: since
+$x_{n+1} = 1/(x_n - a_n)$ and $x_n - a_n \in (0,1)$, we have $x_{n+1} > 1$,
+so $a_{n+1} = \lfloor x_{n+1}\rfloor \geq 1$.  All body partial quotients
+are therefore positive integers, as required by the SCF definition.
 
 ---
 
