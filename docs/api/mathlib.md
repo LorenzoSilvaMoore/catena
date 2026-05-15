@@ -2,22 +2,22 @@
 
 ::: catena.mathlib
 
-## arithmetic
+## mathlib.arithmetic
 
 ::: catena.mathlib.arithmetic
 
-## convert
+## mathlib.convert
 
 ::: catena.mathlib.convert
 
-## core
+## mathlib.core
 
 ::: catena.mathlib.core
 
-## metric
+## mathlib.metric
 
 ::: catena.mathlib.metric
 
-## quadratic
+## mathlib.quadratic
 
 ::: catena.mathlib.quadratic

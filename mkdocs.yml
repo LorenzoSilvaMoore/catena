@@ -23,6 +23,7 @@ nav:
       - generators: api/generators.md
       - cache: api/cache.md
       - mathlib: api/mathlib.md
+      - strings: api/strings.md
   - Theory:
       - catena: theory/theory.md
       - catena.mathlib.convert.from_quadratic_surd_to_scf: theory/from_quadratic_surd_to_scf.md
