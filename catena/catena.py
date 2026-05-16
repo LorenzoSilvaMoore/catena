@@ -42,6 +42,7 @@ from decimal import Decimal
 from collections.abc import Sequence
 
 from .generators import Generator, FiniteGenerator, PeriodicGenerator
+from .views.convergents import ConvergentsView, FiniteConvergentView
 import catena.mathlib as mathlib
 
 # class Method:
@@ -228,6 +229,19 @@ class SimpleContinuedFraction:
     def cache_handler(self) -> CacheHandler:
         """The :class:`~catena.cache.CacheHandler` managing the convergent cache."""
         return self._cache_handler
+    
+    @property
+    def convergents(self) -> ConvergentsView:
+        """
+        A view of the convergents of the SCF.
+
+        Delegates to :attr:`tail_convergent` and :attr:`convergent` for scalar lookups, and provides 
+        additional type conversions for individual convergents.  Notably, slicing is not supported 
+        on this view since it is intended for infinite SCFs; use a loop or list comprehension instead.  
+        For finite SCFs, use :attr:`finite_convergents` instead, which additionally supports slicing 
+        and iteration.
+        """
+        return ConvergentsView(self)
     
     @classmethod
     def _from_shared(cls, source: 'SimpleContinuedFraction', integer_part: int) -> 'SimpleContinuedFraction':
@@ -564,6 +578,12 @@ class FiniteSimpleContinuedFraction(SimpleContinuedFraction):
     def terminal_tail_convergent(self) -> Tuple[int, int]:
         """The last tail convergent ``tail_convergent(size - 1)``."""
         return self.tail_convergent(self.size - 1)
+    
+    @override
+    @property
+    def convergents(self) -> FiniteConvergentView:
+        """A view of the convergents of the finite SCF, supporting slicing and iteration."""
+        return FiniteConvergentView(self)
     
     def __str__(self):
         return f"FiniteSimpleContinuedFraction(partial_quotients={self.partial_quotients}, integer_part={self.integer_part})"
