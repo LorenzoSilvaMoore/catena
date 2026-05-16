@@ -131,153 +131,6 @@ import catena.mathlib as mathlib
 #     #     print(Style.RESET_ALL, end="")
 
 
-
-# class FinateSimpleContinuedFraction:
-#    
-    
-#     def convergent_as_digits(self, n: Optional[int]=None, d: Optional[int]=None) -> float:
-#         if n is None:
-#             n = self.size - 1
-#         if d is None:
-#             d = getcontext().prec
-
-#         try:
-#             p, q = self.convergent(n)
-#             with localcontext() as ctx:
-#                 ctx.prec = d + 5
-#                 decimal_value = Decimal(p)/Decimal(q)
-#                 decimal_str = str(decimal_value).replace('.', '')[:d]
-#             return tuple(map(int, list(decimal_str)))
-#         except ZeroDivisionError:
-#             warnings.warn("A division by zero has been attemped at run time")
-#             return 0.0
-    
-#     def convergent_as_decimal(self, n: Optional[int]=None) -> float:
-#         if n is None:
-#             n = self.size - 1
-
-#         try:
-#             p, q = self.convergent(n)
-#             return Decimal(p)/Decimal(q)
-#         except ZeroDivisionError:
-#             warnings.warn("A division by zero has been attemped at run time")
-#             return 0.0
-    
-#     def convergent_as_string(self, n: Optional[int]=None, length: Optional[int]=None):
-#         if n is None:
-#             n = self.size - 1
-
-#         if length is None:
-#             length=self.str_length
-
-#         return StringMethod.string_divition(self.convergent(n), length=length)
-    
-#     def convergent_float_as_string(self, n: Optional[int]=None, length: Optional[int]=None):
-#         if n is None:
-#             n = self.size - 1
-
-#         if length is None:
-#             length=self.str_length
-            
-#         return StringMethod.string_divition(self.convergent_as_float(n), length=length)
-
-#     def float_value(self, n: Optional[int]=None):
-#         if n is None:
-#             n = self.size - 1
-
-#         return self.head + Method.devide(*self.convergent(n))
-    
-#     def decimal_value(self, n: Optional[int]=None):
-#         if n is None:
-#             n = self.size - 1
-
-#         return Decimal(self.head) + self.convergent_as_decimal(n)
-    
-#     def denominator_length(self, n: Optional[int]=None):
-#         if n is None:
-#             n = self.size - 1
-
-#         return int(log10(self.convergent(n)[1]))+1
-    
-#     def iconvergents(self, start: int=0, stop: Optional[int]=None, step: Optional[int]=None):
-#         if stop is None:
-#             stop = self.size
-#         if step is None:
-#             step = 1
-            
-#         for i in range(start, stop, step):
-#             yield self.convergent(i)
-
-#     def iaftermost_convergents(self, start: int=0, stop: Optional[int]=None, step: Optional[int]=None):
-#         if stop is None:
-#             stop = self.size
-#         if step is None:
-#             step = 1
-
-#         for i in range(start, stop, step):
-#             yield self.aftermost_convergent(i)
-
-#     def iconvergents_as_float(self, start: int=0, stop: Optional[int]=None, step: Optional[int]=None):
-#         if stop is None:
-#             stop = self.size
-#         if step is None:
-#             step = 1
-
-#         for i in range(start, stop, step):
-#             yield self.convergent_as_float(i)
-
-#     def iconvergents_as_digits(self, start: int=0, stop: Optional[int]=None, step: Optional[int]=None, d: Optional[int]=None):
-#         if stop is None:
-#             stop = self.size
-#         if step is None:
-#             step = 1
-
-#         for i in range(start, stop, step):
-#             yield self.convergent_as_digits(i, d)
-
-#     def iconvergents_as_string(self, start: int=0, stop: Optional[int]=None, step: Optional[int]=None, length: Optional[int]=None):
-#         if stop is None:
-#             stop = self.size
-#         if step is None:
-#             step = 1
-#         if length is None:
-#             length=self.str_length
-
-#         for i in range(start, stop, step):
-#             yield StringMethod.string_divition(self.convergent(i), length=length)
-
-#     def iconvergents_float_as_string(self, start: int=0, stop: Optional[int]=None, step: Optional[int]=None, length: Optional[int]=None):
-#         if stop is None:
-#             stop = self.size
-#         if step is None:
-#             step = 1
-#         if length is None:
-#             length=self.str_length
-
-#         for i in range(start, stop, step):
-#             yield StringMethod.string_divition(self.convergent_as_float(i), length=length)
-
-#     def ifloat_values(self, start: int=0, stop: Optional[int]=None, step: Optional[int]=None):
-#         if stop is None:
-#             stop = self.size
-#         if step is None:
-#             step = 1
-
-#         for i in range(start, stop, step):
-#             yield self.head + Method.devide(*self.convergent(i))
-    
-#     def idecimal_values(self, start: int=0, stop: Optional[int]=None, step: Optional[int]=None):
-#         if n is None:
-#             n = self.size - 1
-#         if stop is None:
-#             stop = self.size
-#         if step is None:
-#             step = 1
-
-#         for i in range(start, stop, step):
-#             yield Decimal(self.head) + self.convergent_as_decimal(i)
-
-
 class SimpleContinuedFraction:
     """
     An infinite simple continued fraction ``[a₀; a₁, a₂, …]``.
@@ -295,6 +148,13 @@ class SimpleContinuedFraction:
     frozen after construction; attempting to overwrite them raises
     :exc:`AttributeError`.
     """
+    __slots__ = (
+        "_generator",
+        "_cache_handler",
+        "_tail_cache",
+        "_cached_inverse",
+        "_integer_part"
+    )
 
     def __init__(self, generator: Callable[[int], int], integer_part: int = 0):
         """
@@ -320,26 +180,26 @@ class SimpleContinuedFraction:
 
         super().__setattr__("_generator", generator)
         super().__setattr__("_cache_handler", CacheHandler(OrdinalCache()))
-        super().__setattr__("tail_convergent", SetLightCache(self.tail_convergent, self.cache_handler))
+        super().__setattr__("_tail_cache", SetLightCache(self._tail_convergent, self.cache_handler))
     
     def __setattr__(self, name, value):
         """
         Guards frozen attributes against reassignment after construction.
 
-        ``_generator``, ``_cache_handler``, and ``tail_convergent`` are
-        permanently frozen.  ``_inverse`` is write-once: it can be set
+        ``_generator``, ``_cache_handler``, and ``_tail_cache`` are
+        permanently frozen.  ``_cached_inverse`` is write-once: it can be set
         exactly once (by :meth:`inverse`) and raises :exc:`AttributeError`
         on any subsequent assignment.
 
         Raises:
             AttributeError: If ``name`` is one of ``_generator``,
-                ``_cache_handler``, or ``tail_convergent`` (always), or
-                ``_inverse`` after it has already been set.
+                ``_cache_handler``, or ``_tail_cache`` (always), or
+                ``_cached_inverse`` after it has already been set.
         """
-        if name in {"_generator", "_cache_handler", "tail_convergent"}:
+        if name in {"_generator", "_cache_handler", "_tail_cache"}:
             raise AttributeError(f"'{self.__class__.__name__}.{name}' is immutable and cannot be modified after initialization")
-        if name == "_inverse" and hasattr(self, "_inverse"):
-            raise AttributeError(f"'{self.__class__.__name__}._inverse' is write-once and has already been set")
+        if name == "_cached_inverse" and hasattr(self, "_cached_inverse"):
+            raise AttributeError(f"'{self.__class__.__name__}._cached_inverse' is write-once and has already been set")
         super().__setattr__(name, value)
 
     @property
@@ -381,8 +241,8 @@ class SimpleContinuedFraction:
         inst = cls.__new__(cls)
         object.__setattr__(inst, '_generator', source._generator)
         object.__setattr__(inst, '_cache_handler', source._cache_handler)
-        object.__setattr__(inst, 'tail_convergent', source.tail_convergent)
-        inst._integer_part = integer_part
+        object.__setattr__(inst, '_tail_cache', source._tail_cache)
+        inst.integer_part = integer_part
         return inst
 
     def __str__(self):
@@ -475,8 +335,11 @@ class SimpleContinuedFraction:
                 )
         
         return type(self)(new_generator, integer_part=n)
-    
+
     def tail_convergent(self, n: int) -> Tuple[int, int]:
+        return self._tail_cache(n)
+    
+    def _tail_convergent(self, n: int) -> Tuple[int, int]:
         """
         Computes the *n*-th convergent of the tail ``[a₁; a₂, …, aₙ₊₁]``.
 
@@ -534,8 +397,8 @@ class SimpleContinuedFraction:
             return cache[n]
 
         # Seed the two values needed to begin the loop.
-        prev2 = cache[start - 2] if start - 2 in cache else self.tail_convergent(start - 2)
-        prev1 = cache[start - 1] if start - 1 in cache else self.tail_convergent(start - 1)
+        prev2 = cache[start - 2] if start - 2 in cache else self._tail_convergent(start - 2)
+        prev1 = cache[start - 1] if start - 1 in cache else self._tail_convergent(start - 1)
 
         for i in range(start, n + 1):
             a = int(self.generator(i))
@@ -581,15 +444,15 @@ class SimpleContinuedFraction:
           ``integer_part = 0`` and the generator prepends ``a₀`` before
           delegating to the original generator shifted back by one.
 
-        The result is cached in ``_inverse`` (write-once) and the inverse's
-        own ``_inverse`` is set back to ``self``, so calling ``inverse()``
+        The result is cached in ``_cached_inverse`` (write-once) and the inverse's
+        own ``_cached_inverse`` is set back to ``self``, so calling ``inverse()``
         twice returns the original object.
 
         Returns:
             SimpleContinuedFraction: The multiplicative inverse of this SCF.
         """
-        if hasattr(self, '_inverse'): 
-            return self._inverse
+        if hasattr(self, '_cached_inverse'): 
+            return self._cached_inverse
         
         if self.integer_part == 0:
             new_integer_part = self.generator(0)
@@ -598,13 +461,13 @@ class SimpleContinuedFraction:
             new_integer_part = 0
             new_generator = self.generator.prepend(FiniteGenerator([self.integer_part])) #lambda n: self.generator(n - 1) if n > 0 else self.integer_part
         else:
-            self._inverse = -(-self).inverse() # Handle negative integer part by negating, inverting, and negating again to avoid complications with prepending negative integers.
-            self._inverse._inverse = self
-            return self._inverse
+            self._cached_inverse = -(-self).inverse() # Handle negative integer part by negating, inverting, and negating again to avoid complications with prepending negative integers.
+            self._cached_inverse._cached_inverse = self
+            return self._cached_inverse
         
-        self._inverse = type(self)(new_generator, integer_part=new_integer_part)
-        self._inverse._inverse = self   # Cache the inverse of the inverse as the original SCF
-        return self._inverse            # Make .inverse idempotent pair-wise while avoiding unecessary cloning.
+        self._cached_inverse = type(self)(new_generator, integer_part=new_integer_part)
+        self._cached_inverse._cached_inverse = self   # Cache the inverse of the inverse as the original SCF
+        return self._cached_inverse            # Make .inverse idempotent pair-wise while avoiding unecessary cloning.
     
     def segment(self, n: int) -> 'FiniteSimpleContinuedFraction':
         """
@@ -641,6 +504,7 @@ class FiniteSimpleContinuedFraction(SimpleContinuedFraction):
     * Factory class methods: :meth:`from_rational`, :meth:`from_float`,
       :meth:`from_decimal`.
     """
+    __slots__ = ()
 
     def __init__(self, partial_quotients: Sequence[int]|FiniteGenerator, integer_part: int = 0, dtype: Optional[str] = None):
         """
@@ -911,8 +775,8 @@ class FiniteSimpleContinuedFraction(SimpleContinuedFraction):
             FiniteSimpleContinuedFraction: The multiplicative inverse of this
             finite SCF.
         """
-        if hasattr(self, '_inverse'):
-            return self._inverse
+        if hasattr(self, '_cached_inverse'):
+            return self._cached_inverse
         
         if self.size == 0 and self.integer_part == 0:
             raise ZeroDivisionError("Cannot invert a zero value")
@@ -991,6 +855,7 @@ class PeriodicSimpleContinuedFraction(SimpleContinuedFraction):
       :meth:`is_conjugate_root`, :meth:`inverse` (overridden),
       :meth:`conjugate`.
     """
+    __slots__ = ('_quadratic_coefficients', '_quadratic_surd', '_conjugate')
 
     def __init__(self, period: Sequence[int], pre_period: Optional[Sequence[int]] = [], integer_part: int = 0, dtypes: Optional[Tuple[str, str]] = None):
         """
@@ -1025,7 +890,8 @@ class PeriodicSimpleContinuedFraction(SimpleContinuedFraction):
 
     def __setattr__(self, name, value):
         if name in {"_quadratic_coefficients", "_quadratic_surd", "_conjugate"} and hasattr(self, name):
-            raise AttributeError(f"'{self.__class__.__name__}.{name}' is immutable and cannot be modified after it has been set")
+            raise AttributeError(f"'{self.__class__.__name__}.{name}' is write-once and has already been set")
+        
         super().__setattr__(name, value)
 
     @property
@@ -1190,8 +1056,8 @@ class PeriodicSimpleContinuedFraction(SimpleContinuedFraction):
             PeriodicSimpleContinuedFraction: The multiplicative inverse of this
             periodic SCF.
         """
-        if hasattr(self, '_inverse'):
-            return self._inverse
+        if hasattr(self, '_cached_inverse'):
+            return self._cached_inverse
         
         _, _, C = self.quadratic_coefficients()
         if C == 0:
@@ -1199,12 +1065,12 @@ class PeriodicSimpleContinuedFraction(SimpleContinuedFraction):
 
         P, Q, D = self.quadratic_surd()
         if Q > 0: # Principal surd case
-            self._inverse = PeriodicSimpleContinuedFraction.from_quadratic_surd(-Q * P, -(P**2 - D), D * Q**2)
+            self._cached_inverse = PeriodicSimpleContinuedFraction.from_quadratic_surd(-Q * P, -(P**2 - D), D * Q**2)
         else: # Conjugate surd case
-            self._inverse = PeriodicSimpleContinuedFraction.from_quadratic_surd(Q * P, (P**2 - D), D * Q**2)
+            self._cached_inverse = PeriodicSimpleContinuedFraction.from_quadratic_surd(Q * P, (P**2 - D), D * Q**2)
 
-        self._inverse._inverse = self  # Cache the inverse of the inverse as the original SCF
-        return self._inverse
+        self._cached_inverse._cached_inverse = self  # Cache the inverse of the inverse as the original SCF
+        return self._cached_inverse
 
     def is_principal_surd(self) -> bool:
         """
