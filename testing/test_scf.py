@@ -383,8 +383,8 @@ def test_sequential_new_indices_fill_cache():
     scf = SimpleContinuedFraction(ones)
     for n in range(6):
         scf.tail_convergent(n)
-    # Entries n=0..5 are cached, plus the seed n=-1 (reached via the n=1 recurrence)
-    assert len(scf.cache_handler.cache) == 7
+    # Entries n=0..5 are cached
+    assert len(scf.cache_handler.cache) == 6
 
 
 def test_deep_call_fills_intermediate_entries():
@@ -595,7 +595,7 @@ def test_tail_shares_generator():
 def test_tail_shares_cache():
     scf = SimpleContinuedFraction(ones, integer_part=7)
     tail = scf.tail()
-    assert tail.tail_convergent is scf.tail_convergent
+    assert tail._tail_cache is scf._tail_cache
 
 
 def test_tail_convergents_match_original():
