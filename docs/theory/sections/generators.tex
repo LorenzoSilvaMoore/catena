@@ -29,11 +29,14 @@ record any behavioural differences.
 
 \begin{remark}
   In terms of the SCF, advancing the generator by $n$ discards the first $n$
-  body coefficients, which is precisely the operation performed by
-  \texttt{SimpleContinuedFraction.tail(n)}: the $n$-th tail
-  $[a_{n+1};\,a_{n+2},\ldots]$ has body generator
-  $\mathrm{adv}_n(g)$.  The generator-level operation is therefore the
-  foundational primitive underlying \texttt{tail}.
+  body coefficients: the resulting generator encodes the tail
+  $[a_{n+1};\,a_{n+2},\ldots]$.  Note that
+  \texttt{SimpleContinuedFraction.tail()} (which takes no argument) is a
+  special case: because the body generator already indexes from $a_1$, the
+  tail $[0;\,a_1,a_2,\ldots]$ shares the \emph{same} generator instance
+  unchanged --- only the integer part is set to zero.  Advance is therefore
+  not used by \texttt{tail} itself, but it is the primitive that would be
+  needed to implement a hypothetical $n$-th tail operation.
 \end{remark}
 
 \begin{definition}[Insert]

@@ -21,6 +21,7 @@ nav:
   - API Reference:
       - catena: api/catena.md
       - generators: api/generators.md
+      - views: api/views.md
       - cache: api/cache.md
       - mathlib: api/mathlib.md
       - strings: api/strings.md
