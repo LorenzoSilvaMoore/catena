@@ -28,7 +28,7 @@ from array import array
 from math import gcd
 from typing import Optional, Tuple, override
 
-from .cache import Cache, CacheHandler, SetLightCache, OrdinalCache
+from .cache import BaseCache
 from .strings import safe_int_str
 from .mathlib.core import get_sign
 
@@ -189,29 +189,40 @@ class CachedGenerator(Generator):
     directly from the cache.
     """
 
-    def __init__(self, generator: Callable[[int], int], *args, **kwargs):
+    def __init__(self, generator: Callable[[int], int], *args, seed: dict = None, **kwargs):
         """
         Initialises the cached generator.
 
         Args:
             generator (Callable[[int], int]): A callable that maps a
                 non-negative index *n* to a strictly positive integer.
+            seed (dict, optional): Pre-computed ``{key: value}`` pairs to
+                load into the cache at construction time.  Forwarded to
+                :class:`~catena.cache.BaseCache`.  Does not affect
+                statistics counters.
         """
-        if isinstance(generator, type(self)):
-            return
-        
+        if isinstance(generator, type(self)) and seed is None:
+            return  # __new__ returned the existing instance unchanged
+
+        # When wrapping an existing CachedGenerator (e.g. from super().advance / super().insert)
+        # extract the underlying raw callable so we don't double-cache.
+        if isinstance(generator, CachedGenerator):
+            generator = generator._cache_handler.func
+
         super().__init__(generator=generator, *args, **kwargs)
-        self._cache_handler = CacheHandler(OrdinalCache())
-        self.generator = SetLightCache(func=generator, cache_handler=self._cache_handler)
+        self._cache_handler = BaseCache(func=generator, seed=seed)
+        def _cached_generator(n: int) -> int:
+            return self._cache_handler.cache[n]
+        self.generator = _cached_generator
 
     @property
-    def cache(self) -> Cache:
-        """The underlying :class:`~catena.cache.Cache` storing computed values."""
-        return self._cache_handler.cache
+    def cache(self) -> BaseCache:
+        """The underlying :class:`~catena.cache.BaseCache` storing computed values."""
+        return self._cache_handler
     
     @property
-    def cache_handler(self) -> CacheHandler:
-        """The :class:`~catena.cache.CacheHandler` managing the cache lifecycle."""
+    def cache_handler(self) -> BaseCache:
+        """The :class:`~catena.cache.BaseCache` managing the cache lifecycle."""
         return self._cache_handler
     
     @override
@@ -231,17 +242,16 @@ class CachedGenerator(Generator):
         Raises:
             ValueError: If ``n`` is negative.
         """
-        if n == 0:
+        base = super().advance(n)  # handles validation and n==0 short-circuit
+        if base is self:
             return self
-        
-        h = CachedGenerator(super().advance(n))
+        new_cache = None
         if copy_cache:
-            new_cache = OrdinalCache()
+            new_cache = {}
             for k, v in self.cache.items():
-                if (s:=k-n) >= 0:
+                if (s := k - n) >= 0:
                     new_cache[s] = v
-            h.cache_handler._set_cache(new_cache)
-        return h
+        return CachedGenerator(base, seed=new_cache)
     
     @override
     def insert(self, fg: 'FiniteGenerator', at: int, copy_cache: bool = False, *args, **kwargs) -> 'CachedGenerator':
@@ -262,16 +272,18 @@ class CachedGenerator(Generator):
             ValueError: If ``at`` is negative.
             TypeError: If ``fg`` is not a :class:`FiniteGenerator`.
         """
-        h = CachedGenerator(super().insert(fg, at))
+        base = super().insert(fg, at, *args, **kwargs)  # handles validation and fg.size==0 short-circuit
+        if base is self:
+            return self
+        new_cache = None
         if copy_cache:
-            new_cache = OrdinalCache()
+            new_cache = {}
             for k, v in self.cache.items():
                 if k < at:
                     new_cache[k] = v
                 else:
                     new_cache[k + fg.size] = v
-            h.cache_handler._set_cache(new_cache)
-        return h
+        return CachedGenerator(base, seed=new_cache)
 
     def reset_cache(self) -> None:
         """Clears all entries from the cache, freeing the memoised results."""
@@ -280,11 +292,11 @@ class CachedGenerator(Generator):
     def __str__(self) -> str:
         return f"CachedGenerator({self._generator_name}, cache_size={len(self.cache)})"
     
-    def __new__(cls, generator, *args, **kwargs):
-        if isinstance(generator, cls):
+    def __new__(cls, generator, *args, seed=None, **kwargs):
+        if isinstance(generator, cls) and seed is None:
             return generator
         
-        return object.__new__(cls) 
+        return object.__new__(cls)
     
 
 
@@ -597,57 +609,11 @@ class PeriodicGenerator(Generator):
         
         new_period = self.period
         if at <= len(self.pre_period):
-            # dtype = max((self.pre_period.dtype or 'Z'), (fg.dtype or 'Z')) # _dtypes are ordered from smallest to largest, so max gives the smallest fitting typecode for the combined sequence
-            
-            # # cast to the larger typecode to accommodate for all values in the combined sequence 
-            # # and avoid TypeError from array concatenation.
-            # if dtype != 'Z':
-            #     if dtype != self.pre_period.dtype:
-            #         pre_period_data = array(dtype, self.pre_period._data) if self.pre_period._compact else self.pre_period._data
-            #     else:
-            #         pre_period_data = self.pre_period._data
-
-            #     if dtype != fg.dtype:
-            #         fg_data = array(dtype, fg._data) if fg._compact else fg._data
-            #     else:
-            #         fg_data = fg._data
-            # else:   
-            #     # if the combined sequence exceeds 64-bit range, we have no choice but to use 
-            #     # arbitrary-precision integers and store as tuple
-            #     pre_period_data = list(self.pre_period._data)
-            #     fg_data = list(fg._data)
-
-            # new_pre_period = pre_period_data[:at] + fg_data + pre_period_data[at:]
             new_pre_period = self.pre_period.insert(fg, at=at)
 
         else:
             at -= len(self.pre_period)
             split = at % len(self.period)
-            # dtype = max((self.pre_period.dtype or 'Z'), (fg.dtype or 'Z'), (self.period.dtype or 'Z')) 
-
-            # # cast to the larger typecode to accommodate for all values in the combined sequence
-            # # and avoid TypeError from array concatenation.
-            # if dtype != 'Z':
-            #     if dtype != self.pre_period.dtype:
-            #         pre_period_data = array(dtype, self.pre_period._data) if self.pre_period._compact else self.pre_period._data
-            #     else:
-            #         pre_period_data = self.pre_period._data
-
-            #     if dtype != self.period.dtype:
-            #         period_data = array(dtype, self.period._data) if self.period._compact else self.period._data
-            #     else:
-            #         period_data = self.period._data
-
-            #     if dtype != fg.dtype:
-            #         fg_data = array(dtype, fg._data) if fg._compact else fg._data
-            #     else:
-            #         fg_data = fg._data
-            # else:
-            #     pre_period_data = list(self.pre_period._data)
-            #     period_data = list(self.period._data)
-            #     fg_data = list(fg._data)
-            
-            # new_pre_period = pre_period_data + period_data[:split] + fg_data + period_data[split:]
             new_pre_period = (
                 self.pre_period
                 .insert(self.period, at=len(self.pre_period)) # insert the whole period at the end of the pre-period

@@ -6,7 +6,7 @@ This module exposes three public classes:
 - :class:`SimpleContinuedFraction` — an infinite (or generative) simple
   continued fraction ``[a₀; a₁, a₂, …]`` where the partial quotients are
   produced on demand by a :class:`~catena.generators.Generator`.
-  Convergents are memoised in an :class:`~catena.cache.OrdinalCache`.
+  Convergents are memoised in a :class:`~catena.cache.BaseCache`.
 
 - :class:`FiniteSimpleContinuedFraction` — a finite SCF backed by a fixed
   sequence of partial quotients stored in a
@@ -35,7 +35,7 @@ The standard two-term recurrence is split into two layers:
 
 from fractions import Fraction
 
-from .cache import OrdinalCache, CacheHandler, SetLightCache
+from .cache import BaseCache
 
 from typing import Callable, Tuple, Optional, override
 from decimal import Decimal
@@ -141,17 +141,16 @@ class SimpleContinuedFraction:
     ``a₀`` is stored separately as :attr:`integer_part`.
 
     Tail convergents are automatically memoised via
-    :class:`~catena.cache.SetLightCache` so repeated calls to
+    :class:`~catena.cache.BaseCache` so repeated calls to
     :meth:`tail_convergent` or :meth:`convergent` with the same index are O(1)
     after the first computation.
 
-    Attributes ``_generator``, ``_cache_handler``, and ``tail_convergent`` are
+    Attributes ``_generator`` and ``_tail_cache`` are
     frozen after construction; attempting to overwrite them raises
     :exc:`AttributeError`.
     """
     __slots__ = (
         "_generator",
-        "_cache_handler",
         "_tail_cache",
         "_cached_inverse",
         "_integer_part"
@@ -180,24 +179,23 @@ class SimpleContinuedFraction:
             raise ValueError(f"Expected an integer for '{self.__class__.__name__}.integer_part' but got {integer_part}")
 
         super().__setattr__("_generator", generator)
-        super().__setattr__("_cache_handler", CacheHandler(OrdinalCache()))
-        super().__setattr__("_tail_cache", SetLightCache(self._tail_convergent, self.cache_handler))
+        super().__setattr__("_tail_cache", BaseCache(func=self._tail_convergent))
     
     def __setattr__(self, name, value):
         """
         Guards frozen attributes against reassignment after construction.
 
-        ``_generator``, ``_cache_handler``, and ``_tail_cache`` are
-        permanently frozen.  ``_cached_inverse`` is write-once: it can be set
-        exactly once (by :meth:`inverse`) and raises :exc:`AttributeError`
-        on any subsequent assignment.
+        ``_generator`` and ``_tail_cache`` are permanently frozen.
+        ``_cached_inverse`` is write-once: it can be set exactly once
+        (by :meth:`inverse`) and raises :exc:`AttributeError` on any
+        subsequent assignment.
 
         Raises:
-            AttributeError: If ``name`` is one of ``_generator``,
-                ``_cache_handler``, or ``_tail_cache`` (always), or
-                ``_cached_inverse`` after it has already been set.
+            AttributeError: If ``name`` is one of ``_generator`` or
+                ``_tail_cache`` (always), or ``_cached_inverse`` after
+                it has already been set.
         """
-        if name in {"_generator", "_cache_handler", "_tail_cache"}:
+        if name in {"_generator", "_tail_cache"}:
             raise AttributeError(f"'{self.__class__.__name__}.{name}' is immutable and cannot be modified after initialization")
         if name == "_cached_inverse" and hasattr(self, "_cached_inverse"):
             raise AttributeError(f"'{self.__class__.__name__}._cached_inverse' is write-once and has already been set")
@@ -226,9 +224,9 @@ class SimpleContinuedFraction:
         self._integer_part = n
 
     @property
-    def cache_handler(self) -> CacheHandler:
-        """The :class:`~catena.cache.CacheHandler` managing the convergent cache."""
-        return self._cache_handler
+    def cache_handler(self) -> BaseCache:
+        """The :class:`~catena.cache.BaseCache` managing the convergent cache."""
+        return self._tail_cache
     
     @property
     def convergents(self) -> ConvergentsView:
@@ -254,7 +252,6 @@ class SimpleContinuedFraction:
         """
         inst = cls.__new__(cls)
         object.__setattr__(inst, '_generator', source._generator)
-        object.__setattr__(inst, '_cache_handler', source._cache_handler)
         object.__setattr__(inst, '_tail_cache', source._tail_cache)
         inst.integer_part = integer_part
         return inst
@@ -351,7 +348,18 @@ class SimpleContinuedFraction:
         return type(self)(new_generator, integer_part=n)
 
     def tail_convergent(self, n: int) -> Tuple[int, int]:
-        return self._tail_cache(n)
+        """
+        Computes the *n*-th convergent of the tail ``[a₁; a₂, …, aₙ₊₁]``.
+
+        Args:
+            n (int): 0-indexed depth.  ``n=-2`` and ``n=-1`` return the 
+            recurrence seeds ``(1, 0)`` and ``(0, 1)`` respectively.
+
+        Returns:
+            tuple[int, int]: ``(numerator, denominator)`` of the tail
+            convergent at depth ``n``.
+        """
+        return self._tail_cache[n]
     
     def _tail_convergent(self, n: int) -> Tuple[int, int]:
         """
@@ -366,7 +374,7 @@ class SimpleContinuedFraction:
 
         In particular: ``h₀ = 1``, ``k₀ = a₁ = generator(0)``.
 
-        Results are memoised by :class:`~catena.cache.SetLightCache`.
+        Results are memoised by :class:`~catena.cache.BaseCache`.
 
         Args:
             n (int): 0-indexed depth.  ``n=-2`` and ``n=-1`` return the
@@ -385,7 +393,7 @@ class SimpleContinuedFraction:
             raise RecursionError("A negative value has been reached at runtime")
 
         # Base cases — never cached; returned directly so they never enter the
-        # OrdinalCache and do not distort the frontier (largest_key).
+        # BaseCache and do not distort the frontier (largest_key).
         if n == -2:
             return 1, 0  # h₋₂ = 1, k₋₂ = 0
         if n == -1:
@@ -395,24 +403,24 @@ class SimpleContinuedFraction:
             return 1, self.generator(0)  # h₀ = 1, k₀ = a₁
 
         # Iterative fill: advance from the current cache frontier to n.
-        # OrdinalCache.largest_key gives the highest index already stored,
+        # BaseCache.largest_key gives the highest index already stored,
         # so we only compute the truly missing entries — O(gap) work and
         # O(1) stack depth regardless of n.
-        # Clamp start to 0: base-case seeds (n=-2, n=-1) may have been stored
-        # in the cache by the SetLightCache wrapper when called directly, which
-        # would corrupt the frontier if we started below 0.
-        cache = self.cache_handler.cache
+        # Clamp start to 0: base-case seeds (n=-2, n=-1) are handled above
+        # and never entered into the cache; guard against a stale frontier
+        # sitting below 0 from a previous clear/prune.
+        cache = self._tail_cache
         lk = cache.largest_key
         start = 0 if (lk is None or lk < 0) else lk + 1
 
         if start > n:
-            # n is already cached; the SetLightCache wrapper will have
-            # returned before reaching here, but guard for direct calls.
+            # n is already cached; __getitem__ will have returned before
+            # reaching _tail_convergent, but guard for direct calls.
             return cache[n]
 
         # Seed the two values needed to begin the loop.
-        prev2 = cache[start - 2] if start - 2 in cache else self._tail_convergent(start - 2)
-        prev1 = cache[start - 1] if start - 1 in cache else self._tail_convergent(start - 1)
+        prev2 = self._tail_cache[start - 2]
+        prev1 = self._tail_cache[start - 1]
 
         for i in range(start, n + 1):
             a = int(self.generator(i))
@@ -806,18 +814,18 @@ class FiniteSimpleContinuedFraction(SimpleContinuedFraction):
         # recomputing the full recurrence when inv.terminal_convergent is
         # called later.  Only runs when self's cache already reaches the
         # terminal entry (largest_key == size - 1).
-        if self.cache_handler.cache.largest_key == self.size - 1:
+        if self.cache_handler.largest_key == self.size - 1:
             if self.integer_part == 0 and self.size > 0:
                 # inv = [a₁; a₂, …, aₙ]  (advance by 1, inv.size = n-1)
                 # inv.tail_convergent(n-2) = (k_{n-1} - a₁·h_{n-1},  h_{n-1})
                 ttc = self.tail_convergent(self.size - 1)   # free – already cached
                 a1 = self.generator(0)
-                inv.cache_handler.cache[inv.size - 1] = (ttc[1] - a1 * ttc[0], ttc[0])
+                inv.cache_handler[inv.size - 1] = (ttc[1] - a1 * ttc[0], ttc[0])
             elif self.integer_part > 0 and self.size > 0:
                 # inv = [0; a₀, a₁, …, aₙ]  (prepend a₀, inv.size = n+1)
                 # inv.tail_convergent(n) = (k_{n-1},  h_{n-1})  = (tc[1], tc[0])
                 tc = self.terminal_convergent               # free – already cached
-                inv.cache_handler.cache[inv.size - 1] = (tc[1], tc[0])
+                inv.cache_handler[inv.size - 1] = (tc[1], tc[0])
 
         else:
             pass # for the negative case, the logic -(-self).inverse() passes the paths above as well.

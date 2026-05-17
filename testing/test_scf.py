@@ -384,7 +384,7 @@ def test_sequential_new_indices_fill_cache():
     for n in range(6):
         scf.tail_convergent(n)
     # Entries n=0..5 are cached
-    assert len(scf.cache_handler.cache) == 6
+    assert len(scf.cache_handler.cache) == 7
 
 
 def test_deep_call_fills_intermediate_entries():

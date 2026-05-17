@@ -1,17 +1,3 @@
-# from .catena import (
-#     Method,
-#     StringMethod,
-#     Convert,
-#     FinateSimpleContinuedFraction,
-# )
-
-# __all__ = [
-#     "Method",
-#     "StringMethod",
-#     "Convert",
-#     "FinateSimpleContinuedFraction",
-# ]
-
 from importlib.metadata import version, PackageNotFoundError
 
 try:
