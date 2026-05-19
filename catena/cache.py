@@ -14,9 +14,11 @@ This module provides:
 - :func:`SetLightCache` — a lighter variant of :func:`SetCache` for
   single-argument functions, using the argument directly as the cache key.
 """
+from __future__ import annotations
+
 import heapq
 
-from typing import Callable, Optional, override
+from typing import Any, Callable, Optional, override
 from collections import UserDict
 
 class BaseCache(UserDict):
@@ -49,7 +51,7 @@ class BaseCache(UserDict):
         This class is experimental.  Its interface is subject to change
         without notice.
     """
-    def __init__(self, *args, func: Callable, maxsize: int = None, prune_key: Callable[[int], tuple[int, Optional[str]]] = None, seed: dict = None, **kwargs):
+    def __init__(self, *args: Any, func: Callable, maxsize: int = None, prune_key: Callable[[int], tuple[int, Optional[str]]] = None, seed: dict = None, **kwargs: Any) -> None:
         """
         Initialises the cache.
 
@@ -98,7 +100,7 @@ class BaseCache(UserDict):
                     if key > self._largest_key:
                         self._largest_key = key
 
-    def __setitem__(self, key, value):
+    def __setitem__(self, key: Any, value: Any) -> None:
         """
         Stores ``value`` under ``key``.
 
@@ -128,7 +130,7 @@ class BaseCache(UserDict):
         self._write_count += 1
         super().__setitem__(key, value)
 
-    def __getitem__(self, key):
+    def __getitem__(self, key: Any) -> Any:
         """
         Returns the cached value for ``key``, computing and storing it on a miss.
 
@@ -147,7 +149,7 @@ class BaseCache(UserDict):
             return self.data[key]
         return self.__missing__(key)
 
-    def __missing__(self, key):
+    def __missing__(self, key: Any) -> Any:
         """
         Called by :meth:`__getitem__` on a cache miss.
 
@@ -243,8 +245,9 @@ class BaseCache(UserDict):
 
         Args:
             n (int): Number of entries to keep.  Defaults to ``2``.
-            order (str): Whether to keep the entries with the 
-            largest keys ('asc') or smallest keys ('desc').  Defaults to 'asc'.
+            order (str): Whether to keep the entries with the
+                largest keys (``'asc'``) or smallest keys (``'desc'``).
+                Defaults to ``'asc'``.
 
         Raises:
             ValueError: If ``order`` is not 'asc' or 'desc'.
@@ -296,7 +299,7 @@ class BaseCache(UserDict):
         self._largest_key = float('-inf')
 
     @override
-    def copy(self):
+    def copy(self) -> BaseCache:
         """
         Returns a shallow copy of the cache.
 
@@ -317,7 +320,7 @@ class BaseCache(UserDict):
         return new_cache
     
     @override
-    def get(self, key, default=None):
+    def get(self, key: Any, default: Any = None) -> Any:
         """
         Returns the cached value for ``key``, or ``default`` on a miss.
 

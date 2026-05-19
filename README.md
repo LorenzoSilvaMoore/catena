@@ -162,6 +162,7 @@ scf = FiniteSimpleContinuedFraction.from_float(math.pi, max_denominator=1000)
 print(scf.terminal_convergent)   # (355, 113)
 
 scf2 = FiniteSimpleContinuedFraction.from_decimal("3.14159265")
+print(scf2.terminal_convergent)  # (62831853, 20000000)
 ```
 
 ### Infinite (generative) SCF
@@ -172,8 +173,8 @@ from catena import SimpleContinuedFraction
 # Golden ratio  φ = [1; 1, 1, 1, ...]
 phi = SimpleContinuedFraction(lambda n: 1, integer_part=1)
 
-phi.tail_convergent(10)   # (89, 144) — consecutive Fibonacci numbers
-phi.convergent(10)        # (233, 144)
+phi.tail_convergent(10)   # (89, 144) — exactly the same as the 10th convergent of [0; 1, 1, 1, ...]
+phi.convergent(10)        # (233, 144) — 10th convergent of [1; 1, 1, 1, ...]
 
 # Shift the integer part without recomputing the cache
 phi_shifted = phi + 2     # [3; 1, 1, 1, ...]  — shares phi's cache

@@ -352,8 +352,8 @@ class SimpleContinuedFraction:
         Computes the *n*-th convergent of the tail ``[a₁; a₂, …, aₙ₊₁]``.
 
         Args:
-            n (int): 0-indexed depth.  ``n=-2`` and ``n=-1`` return the 
-            recurrence seeds ``(1, 0)`` and ``(0, 1)`` respectively.
+            n (int): 0-indexed depth.  ``n=-2`` and ``n=-1`` return the
+                recurrence seeds ``(1, 0)`` and ``(0, 1)`` respectively.
 
         Returns:
             tuple[int, int]: ``(numerator, denominator)`` of the tail
