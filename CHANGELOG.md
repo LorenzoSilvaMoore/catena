@@ -7,6 +7,84 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ---
 
+## [0.5.0] — 2026-05-18
+
+### Added
+
+- `catena.views.convergents` — new `ConvergentsView` (point-access, type
+  conversions, `as_fraction`, `as_float`) and `FiniteConvergentView`
+  (iteration, negative indexing, slicing, lazy bulk generators via
+  `apply()`) exposed through `SimpleContinuedFraction.convergents` and
+  `FiniteSimpleContinuedFraction.convergents` respectively.  Both classes
+  use `__slots__` for allocation efficiency.
+- `catena.cache.BaseCache` — a single self-computing, append-only cache
+  (`UserDict` subclass) that replaces the four legacy primitives.  Key
+  features: auto-computes on miss via `__missing__`; tracks `call_count`,
+  `read_count`, and `write_count`; maintains `smallest_key` / `largest_key`
+  for integer keys without iteration; optional `maxsize` with auto-prune
+  via a configurable `prune_key` callable; `seed` constructor parameter for
+  pre-warming without affecting statistics; mutating `UserDict` methods
+  blocked with `NotImplementedError`.
+
+### Changed
+
+- `SimpleContinuedFraction`, `FiniteSimpleContinuedFraction`, and
+  `PeriodicSimpleContinuedFraction` now declare `__slots__`, preventing
+  accidental attribute injection and reducing per-instance overhead.
+- `_inverse` renamed to `_cached_inverse` across all three SCF classes for
+  clarity.
+- `tail_convergent` refactored: the public `tail_convergent(n)` dispatcher
+  now routes through `BaseCache.__getitem__`; the recurrence itself lives in
+  the private `_tail_convergent(n)` method bound as the cache's `func`.
+- `SimpleContinuedFraction.cache_handler` now returns the `BaseCache`
+  instance directly (previously returned a `CacheHandler` wrapping an
+  `OrdinalCache`; the indirection layer no longer exists).
+- `CachedGenerator` internally uses `BaseCache` instead of a
+  `CacheHandler(OrdinalCache())` + `SetLightCache` stack.  The `seed=`
+  constructor parameter pre-populates the cache at construction time,
+  replacing the post-construction `_seed()` escape hatch.
+- `CachedGenerator.advance(n, copy_cache=True)` and
+  `CachedGenerator.insert(fg, at, copy_cache=True)` pass the re-indexed
+  cache entries via `seed=` to the new instance instead of mutating it
+  after construction.
+- `CachedGenerator.__new__` / `__init__` fixed to only short-circuit the
+  identity-wrap when `seed is None`; when wrapping an existing
+  `CachedGenerator` (result of `super().advance` / `super().insert`), the
+  raw callable is extracted from `_cache_handler.func` to avoid
+  double-caching.
+
+### Removed
+
+- `catena.cache.Cache`, `OrdinalCache`, `CacheHandler`, `SetCache`,
+  `SetLightCache` — all replaced by `BaseCache`.  Direct imports of these
+  names will break.
+
+### Fixed
+
+- `generators.tex` (caching section): removed false claim that `tail(n)`
+  advances the generator by `n` steps; `tail()` takes no argument and
+  shares the generator unchanged.
+
+### Documentation
+
+- New API reference page `docs/api/views.md` for `catena.views.convergents`
+  wired into MkDocs nav.
+- `README.md` and `docs/theory/sections/caching.tex`: all references to the
+  old cache primitives updated to `BaseCache`; caching section rewritten to
+  describe the unified design.
+
+### Tests
+
+- 67 new tests in `testing/test_views_convergents.py` covering construction,
+  delegation, all scalar and bulk convergent-view methods, laziness, and
+  edge cases.
+- 72 new tests in `testing/test_cache.py` (replacing the old
+  `Cache`/`OrdinalCache`/`CacheHandler` tests) covering all `BaseCache`
+  behaviour: construction, miss/hit paths, immutability, key-range tracking,
+  statistics, pruning, seeding, reset, copy, blocked methods, and repr.
+
+---
+
 ## [0.4.2] — 2026-05-13
 
 ### Changed
