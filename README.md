@@ -89,7 +89,7 @@ implemented or partially implemented:
 - **Generator manipulation** — all four generator types support `advance(n)`,
   `insert(fg, at)`, and `prepend(fg)` for slicing, splicing, and reordering
   partial-quotient sequences.  `CachedGenerator` variants optionally copy and
-  re-index the memoised cache across operations.
+  re-index the memoised `BaseCache` across operations.
 - **Full SCF arithmetic** — `FiniteSimpleContinuedFraction` supports `__neg__`,
   `__sub__`, `__mul__`, `__truediv__`, extended `__add__` (accepts `float`,
   `Fraction`, `Decimal`), `__eq__` (compares by exact rational value via
@@ -301,7 +301,7 @@ catena/
 ├── catena.py            # SimpleContinuedFraction, FiniteSimpleContinuedFraction,
 │                        #   PeriodicSimpleContinuedFraction
 ├── generators.py        # Generator, CachedGenerator, FiniteGenerator, PeriodicGenerator
-├── cache.py             # Cache, OrdinalCache, CacheHandler, SetCache, SetLightCache
+├── cache.py             # BaseCache (self-computing append-only cache)
 ├── strings.py           # safe_int_str, safe_full_int_str
 ├── mathlib/
 │   ├── __init__.py      # Re-exports all submodules
@@ -325,7 +325,7 @@ testing/
 ├── test_finite_scf.py           # FiniteSimpleContinuedFraction tests
 ├── test_periodic_scf.py         # PeriodicSimpleContinuedFraction tests
 ├── test_generators.py           # Generator / CachedGenerator / FiniteGenerator / PeriodicGenerator tests
-├── test_cache.py                # Cache / OrdinalCache / CacheHandler / SetCache tests
+├── test_cache.py                # BaseCache tests
 ├── test_math_core.py            # mathlib.core tests
 ├── test_math_arithmetic.py      # mathlib.arithmetic tests
 ├── test_math_quadratic.py       # mathlib.quadratic + convert surd helpers tests
@@ -353,7 +353,7 @@ A formal write-up of the theory and implementation decisions is available as a P
 standard library (`fractions`, `decimal`, `array`, `collections`, `math`).
 
 **Immutability by default.**  Core attributes of `SimpleContinuedFraction`,
-`CacheHandler`, and related classes are frozen after construction.  Mutations
+`BaseCache`, and related classes are frozen after construction.  Mutations
 raise `AttributeError` early rather than silently producing wrong results.
 
 **Two-layer convergent computation.**  `tail_convergent` computes the

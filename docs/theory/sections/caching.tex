@@ -15,73 +15,79 @@ Without memoisation a naive recursive implementation recomputes all earlier
 tail convergents each time a later one is requested.  With memoisation each
 value is computed once, reducing the total cost from $O(2^n)$ to $O(n)$.
 All \texttt{SimpleContinuedFraction} instances carry a dedicated
-\texttt{cache\_handler} for this purpose.
+\texttt{\_tail\_cache} for this purpose.
 
 \textbf{Generator caching.}  When the partial-quotient function $g: \N \to \Zp$
 is expensive to evaluate (e.g.\ a number-theoretic function or a transcendental
 constant computed digit by digit), re-evaluating $g(n)$ on every recurrence step
 would dominate the runtime.  \texttt{CachedGenerator} wraps an arbitrary callable
-and memoises each distinct index in an \texttt{OrdinalCache}.
+and memoises each distinct index in a \texttt{BaseCache}.
 
-\subsection{Cache Primitives}
+\subsection{The \texttt{BaseCache} Primitive}
 
-\catena's caching layer is built from three composable primitives, all defined
-in \texttt{catena.cache}.
-
-\begin{description}[style=nextline]
-  \item[\texttt{Cache} (append-only dictionary).]
-    A subclass of \texttt{UserDict} that overrides \texttt{\_\_setitem\_\_}:
-    once a key is written, any subsequent attempt to overwrite it raises
-    \texttt{KeyError}.  This \emph{immutability-after-write} guarantee is
-    correct for convergents and generator values alike, because both are
-    deterministic functions of their index for a fixed SCF.
-
-  \item[\texttt{OrdinalCache} (integer-keyed cache with range tracking).]
-    A \texttt{Cache} that additionally enforces integer keys and maintains
-    \texttt{smallest\_key} / \texttt{largest\_key} attributes reflecting the
-    currently stored range.  The \texttt{largest\_key} sentinel is used by the
-    tail-convergent iterative fill: the recurrence advances from
-    \texttt{largest\_key + 1} to $n$, computing only the truly missing entries
-    in $O(\text{gap})$ time and $O(1)$ call-stack depth regardless of $n$.
-
-  \item[\texttt{CacheHandler} (bookkeeping wrapper).]
-    Owns a \texttt{Cache} instance and records two counters:
-    \texttt{call\_count} (cache misses — the underlying function was called) and
-    \texttt{read\_count} (cache hits — a stored result was returned).
-    All three internal attributes (\texttt{\_cache}, \texttt{\_call\_count},
-    \texttt{\_read\_count}) are guarded by a custom \texttt{\_\_setattr\_\_} so
-    they cannot be accidentally overwritten.  Two lifecycle methods are provided:
-    \texttt{reset\_cache} replaces the current cache with a fresh empty instance
-    of the same type, and \texttt{prune\_cache(n)} retains only the $n$
-    numerically largest keys, discarding the rest (useful when memory is
-    constrained and only the most recently computed convergents matter).
-\end{description}
-
-\subsection{Memoisation Decorators}
-
-Two function-level memoisation decorators build on \texttt{CacheHandler}.
+\catena's caching layer is built around a single primitive defined in
+\texttt{catena.cache}: \texttt{BaseCache}.  It is a self-computing,
+append-only dictionary (\texttt{UserDict} subclass) that unifies the three
+separate classes that existed in earlier versions (\texttt{Cache},
+\texttt{OrdinalCache}, and \texttt{CacheHandler}).
 
 \begin{description}[style=nextline]
-  \item[\texttt{SetLightCache}.]
-    Wraps a \emph{single-argument} callable.  The sole argument is used
-    directly as the cache key, avoiding the overhead of tuple construction and
-    \texttt{frozenset} hashing.  This is the decorator applied to
-    \texttt{tail\_convergent} on every \texttt{SimpleContinuedFraction} instance
-    and to the inner callable of every \texttt{CachedGenerator}.
+  \item[Immutability after write.]
+    Once a key is stored, any subsequent attempt to overwrite it raises
+    \texttt{KeyError}.  This is correct for convergents and generator values
+    alike, because both are deterministic functions of their index for a fixed SCF.
 
-  \item[\texttt{SetCache}.]
-    The general multi-argument variant, keying on
-    \texttt{(args, frozenset(kwargs.items()))}.  Used when the wrapped function
-    accepts more than one argument.
+  \item[Self-computing on miss.]
+    \texttt{BaseCache} is constructed with a bound callable \texttt{func}.
+    Accessing a missing key via \texttt{cache[key]} calls \texttt{func(key)},
+    stores the result, and returns it — no external decorator or wrapper is
+    needed.  Explicit writes (\texttt{cache[key] = value}) are also accepted
+    and bypass the function call.
+
+  \item[Key-range tracking.]
+    For integer keys, \texttt{smallest\_key} and \texttt{largest\_key}
+    are maintained without iterating the dictionary.
+    The \texttt{largest\_key} sentinel drives the tail-convergent iterative
+    fill: the recurrence advances from \texttt{largest\_key + 1} to $n$,
+    computing only the truly missing entries in $O(\text{gap})$ time and
+    $O(1)$ call-stack depth regardless of $n$.
+
+  \item[Usage statistics.]
+    \texttt{call\_count} counts cache misses (calls to \texttt{func}),
+    \texttt{read\_count} counts cache hits (stored-result retrievals), and
+    \texttt{write\_count} counts all writes (including those from seeding
+    and intermediate fills).
+
+  \item[Capacity management.]
+    An optional \texttt{maxsize} parameter caps the number of stored entries.
+    When a new write would exceed the limit, \texttt{prune(n, order)} is
+    called automatically using a configurable \texttt{prune\_key} callable.
+    The default policy retains the \texttt{maxsize\,-\,1} largest-keyed
+    entries, keeping the recurrence frontier intact.  \texttt{reset()} clears
+    the cache and all counters; \texttt{clear()} clears entries only, preserving
+    \texttt{call\_count} and \texttt{read\_count}.
+
+  \item[Construction-time seeding.]
+    The \texttt{seed} constructor parameter pre-populates the cache from a
+    plain dict without incrementing any statistics counters.  This is the
+    mechanism used by \texttt{CachedGenerator.advance} and
+    \texttt{CachedGenerator.insert} to carry relevant entries across
+    cache-shifting operations.
+
+  \item[Blocked mutation methods.]
+    The mutating \texttt{UserDict} methods (\texttt{pop}, \texttt{popitem},
+    \texttt{\_\_delitem\_\_}, \texttt{update}, \texttt{setdefault},
+    \texttt{fromkeys}, \texttt{\_\_or\_\_}) are all disabled and raise
+    \texttt{NotImplementedError}.  Use \texttt{prune} or \texttt{reset} to
+    reduce cache size.
 \end{description}
 
 \subsection{Generator-Level Caching: \texttt{CachedGenerator}}
 
 \texttt{CachedGenerator} is a subclass of \texttt{Generator} that internally
-applies \texttt{SetLightCache} (backed by a fresh \texttt{OrdinalCache}) to the
-wrapped callable.  Every call \texttt{cgen(n)} is therefore intercepted by the
-light cache: on a miss the underlying function is called and the result stored;
-on a hit the stored result is returned directly.
+holds a \texttt{BaseCache} bound to the wrapped callable.  Every call
+\texttt{cgen(n)} is routed through the cache: on a miss the underlying function
+is invoked and the result stored; on a hit the stored result is returned directly.
 
 \textbf{When to use each generator type.}
 \begin{enumerate}
@@ -89,7 +95,7 @@ on a hit the stored result is returned directly.
         that is cheap to evaluate (e.g.\ a closed-form formula).
   \item \texttt{CachedGenerator}: use when $g(n)$ is expensive \emph{and}
         catena's cache introspection is needed (\texttt{call\_count},
-        \texttt{read\_count}, \texttt{reset\_cache}, \texttt{OrdinalCache}
+        \texttt{read\_count}, \texttt{stats}, \texttt{BaseCache}
         bookkeeping).  Also the right choice when one expensive generator
         must be shared across several SCF instances so that all instances
         draw from the same memoised pool.
@@ -133,11 +139,11 @@ cgen.read_count          # 11  (all hits: entries 0..10 were populated by scf)
 def fib(n):
     return fib(n - 1) + fib(n - 2) if n > 1 else n + 1
 
-# Wrap in CachedGenerator to add OrdinalCache introspection on top
+# Wrap in CachedGenerator to add BaseCache introspection on top
 cgen_fib = CachedGenerator(fib)     # fib's own lru_cache handles recursion
 cgen_fib(10)                        # fib(10) was already cached by lru_cache
 cgen_fib.call_count                 # 1
-cgen_fib.reset_cache()              # clears OrdinalCache; lru_cache unchanged
+cgen_fib.cache.reset()              # clears BaseCache; lru_cache unchanged
 \end{lstlisting}
 \end{catenadef}
 
@@ -145,9 +151,9 @@ cgen_fib.reset_cache()              # clears OrdinalCache; lru_cache unchanged
 
 All \texttt{tail()}, \texttt{shift()}, and \texttt{segment(size)} operations
 create a new SCF instance via \texttt{\_from\_shared}, which copies the
-\emph{reference} to \texttt{\_cache\_handler} rather than duplicating the cache
+\emph{reference} to \texttt{\_tail\_cache} rather than duplicating the cache
 object.  Consequently both the original and the derived SCF read from and write
-to the same \texttt{OrdinalCache}; a tail-convergent computed by one is
+to the same \texttt{BaseCache}; a tail-convergent computed by one is
 immediately available to the other at zero cost.
 
 This is the mechanism that makes the following hold:
@@ -159,7 +165,7 @@ from catena import SimpleContinuedFraction
 phi = SimpleContinuedFraction(lambda n: 1, integer_part=1)
 phi.tail_convergent(9)             # populates cache entries 0..9
 
-tail = phi.tail()                  # new instance, same cache_handler
+tail = phi.tail()                  # new instance, same _tail_cache
 tail.cache_handler is phi.cache_handler   # True
 tail.tail_convergent(9)            # O(1) cache hit -- no recomputation
 phi.cache_handler.read_count       # incremented by the hit above
