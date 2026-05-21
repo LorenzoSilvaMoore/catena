@@ -191,7 +191,7 @@ def from_decimal_to_rational(d: str) -> Rational:
     return numerator, denominator
 
 
-def from_quadratic_surd_to_scf(P: int, Q: int, D: int):
+def from_quadratic_surd_to_scf(P: int, Q: int, D: int) -> tuple[int, tuple[int, ...], tuple[int, ...]]:
     if Q == 0:
         raise ValueError("Q cannot be zero")
     if D < 0:
@@ -222,5 +222,5 @@ def from_quadratic_surd_to_scf(P: int, Q: int, D: int):
     return scf[0], tuple(scf[1:visited[(m, d)]]), tuple(scf[visited[(m, d)]:])
 
 
-def from_quadratic_surd_to_conjugate_scf(P: int, Q: int, D: int):
+def from_quadratic_surd_to_conjugate_scf(P: int, Q: int, D: int) -> tuple[int, tuple[int, ...], tuple[int, ...]]:
     return from_quadratic_surd_to_scf(-P, -Q, D)

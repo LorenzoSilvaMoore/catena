@@ -26,7 +26,7 @@ from collections.abc import Callable, Collection, Sequence
 from array import array
 
 from math import gcd
-from typing import Optional, Tuple, Union, cast, overload, override, TYPE_CHECKING
+from typing import Optional, Tuple, Union, cast, overload, override, TYPE_CHECKING, Any, Self, Sized, Iterator
 
 from .cache import BaseCache
 from .strings import safe_int_str
@@ -87,7 +87,7 @@ class Generator:
             
             return type(self)(_advanced_generator)
         
-    def insert(self, fg: 'FiniteGenerator', at: int, *args, **kwargs) -> 'Generator':
+    def insert(self, fg: 'FiniteGenerator', at: int, *args: Any, **kwargs: Any) -> 'Generator':
         """
         Inserts another generator into this one at a specified index, returning a new generator that produces the combined sequence.
 
@@ -126,7 +126,7 @@ class Generator:
 
         return type(self)(generator=_inserted_generator)
     
-    def prepend(self, fg: 'FiniteGenerator', *args, **kwargs) -> 'Generator':
+    def prepend(self, fg: 'FiniteGenerator', *args: Any, **kwargs: Any) -> 'Generator':
         """
         Prepends another generator to this one, returning a new generator that produces the combined sequence.
         Equivalent to ``self.insert(fg, at=0)``.
@@ -168,7 +168,7 @@ class Generator:
     def __str__(self) -> str:
         return f"Generator({self._generator_name})"
     
-    def __new__(cls, generator, *args, **kwargs):
+    def __new__(cls, generator: Union[Callable[[int], int], Self], *args: Any, **kwargs: Any) -> Self:
         """
         Returns the existing instance if ``generator`` is already a
         :class:`Generator`, avoiding unnecessary double-wrapping.
@@ -191,7 +191,7 @@ class CachedGenerator(Generator):
     if TYPE_CHECKING:
         _cache_handler: BaseCache  # for type checkers; not an actual class attribute
 
-    def __init__(self, generator: Union[Callable[[int], int], 'CachedGenerator'], *args, seed: Optional[dict] = None, **kwargs):
+    def __init__(self, generator: Union[Callable[[int], int], 'CachedGenerator'], *args: Any, seed: Optional[dict[int, int]] = None, **kwargs: Any):
         """
         Initialises the cached generator.
 
@@ -216,7 +216,7 @@ class CachedGenerator(Generator):
         super().__init__(generator, *args, **kwargs)
         self._cache_handler = BaseCache(func=generator, seed=seed)
         def _cached_generator(n: int) -> int:
-            return self._cache_handler.cache[n]
+            return cast(int, self._cache_handler.cache[n])
         self.generator = _cached_generator
 
     @property
@@ -258,7 +258,7 @@ class CachedGenerator(Generator):
         return CachedGenerator(base, seed=new_cache)
     
     @override
-    def insert(self, fg: 'FiniteGenerator', at: int, copy_cache: bool = False, *args, **kwargs) -> 'CachedGenerator':
+    def insert(self, fg: 'FiniteGenerator', at: int, copy_cache: bool = False, *args: Any, **kwargs: Any) -> 'CachedGenerator':
         """
         Inserts another generator into this one at a specified index, optionally copying relevant cache entries.
         Args:
@@ -296,7 +296,7 @@ class CachedGenerator(Generator):
     def __str__(self) -> str:
         return f"CachedGenerator({self._generator_name}, cache_size={len(self.cache)})"
     
-    def __new__(cls, generator, *args, seed=None, **kwargs):
+    def __new__(cls, generator: Union[Callable[[int], int], Self], *args: Any, seed: Optional[dict[int, int]] = None, **kwargs: Any) -> Self:
         if isinstance(generator, cls) and seed is None:
             return generator
         
@@ -304,7 +304,7 @@ class CachedGenerator(Generator):
     
 
 
-class FiniteGenerator(Generator):
+class FiniteGenerator(Generator, Sized):
     """
     A :class:`Generator` backed by a fixed sequence of positive integers.
 
@@ -322,12 +322,12 @@ class FiniteGenerator(Generator):
     }
 
     if TYPE_CHECKING:
-        _data: Union[array, tuple]  # for type checkers; not an actual class attribute
+        _data: Union[array[int], tuple[int, ...]]  # for type checkers; not an actual class attribute
         _compact: bool
         _min: Optional[int]
         _max: Optional[int]
 
-    def __init__(self, data: Union[Sequence[int], 'FiniteGenerator'], dtype: Optional[str] = None, *args, **kwargs):
+    def __init__(self, data: Union[Sequence[int], Self], dtype: Optional[str] = None, *args: Any, **kwargs: Any):
         """
         Initialises the finite generator from a sequence of positive integers.
 
@@ -397,7 +397,7 @@ class FiniteGenerator(Generator):
         super().__init__(_at, *args, **kwargs)
 
     @override
-    def advance(self, n: int) -> 'FiniteGenerator':
+    def advance(self, n: int) -> Self:
         if n > self.size:
             raise IndexError(f"Cannot advance beyond the end of the sequence (size {self.size}), got n={n}.")
         
@@ -412,10 +412,10 @@ class FiniteGenerator(Generator):
         # since it would require scanning the remaining data to find the new max value. Instead, 
         # we can safely reuse the same dtype since advancing can only reduce the max value 
         # (or keep it the same if all values are equal).
-        return FiniteGenerator(self._data[n:], dtype=self.dtype)
+        return type(self)(self._data[n:], dtype=self.dtype)
 
     @override
-    def insert(self, fg: 'FiniteGenerator', at: int) -> 'FiniteGenerator':
+    def insert(self, fg: Self, at: int) -> Self:
         if at < 0:
             raise ValueError(f"Input 'at' must be non-negative, got {at}.")
         
@@ -429,22 +429,22 @@ class FiniteGenerator(Generator):
         # cast to the larger typecode to accommodate for all values in the combined sequence
         # and avoid TypeError from array concatenation.
 
-        new_data: array | tuple
+        new_data: array[int] | tuple[int, ...]
         if dtype != 'Z':
             # When dtype != 'Z', both self and fg use compact array storage (_compact is True)
-            s: array = array(dtype, self._data) if dtype != self.dtype else cast(array, self._data)
-            f: array = array(dtype, fg._data) if dtype != fg.dtype else cast(array, fg._data)
+            s: array[int] = array(dtype, self._data) if dtype != self.dtype else cast(array[int], self._data)
+            f: array[int] = array(dtype, fg._data) if dtype != fg.dtype else cast(array[int], fg._data)
             new_data = s[:at] + f + s[at:]
         else:
-            ts = cast(tuple, self._data)
-            tf = cast(tuple, fg._data)
+            ts = cast(tuple[int, ...], self._data)
+            tf = cast(tuple[int, ...], fg._data)
             new_data = ts[:at] + tf + ts[at:]
 
         final_dtype = None if dtype == 'Z' else dtype
 
-        return FiniteGenerator(new_data, dtype=final_dtype)
+        return type(self)(new_data, dtype=final_dtype)
     
-    def concatenate(self, fg: 'FiniteGenerator') -> 'FiniteGenerator':
+    def concatenate(self, fg: Self) -> Self:
         """
         Concatenates another FiniteGenerator to this one, returning a new FiniteGenerator that produces the combined sequence.
         Equivalent to ``self.insert(fg, at=self.size)``.
@@ -457,7 +457,7 @@ class FiniteGenerator(Generator):
         """
         return self.insert(fg, at=self.size)
 
-    def __new__(cls, data, dtype=None, *args, **kwargs):
+    def __new__(cls, data: Union[Sequence[int], Self], dtype: Optional[str] = None, *args: Any, **kwargs: Any) -> Self:
         if isinstance(data, cls):
             return data
         return object.__new__(cls)
@@ -470,7 +470,7 @@ class FiniteGenerator(Generator):
     @property
     def dtype(self) -> str | None:
         """Array typecode used for compact storage, or ``None`` if arbitrary-precision."""
-        return cast(array, self._data).typecode if self._compact else None
+        return cast(array[int], self._data).typecode if self._compact else None
 
     @property
     def is_compact(self) -> bool:
@@ -500,13 +500,13 @@ class FiniteGenerator(Generator):
     @overload
     def __getitem__(self, index: int) -> int: ...
     @overload
-    def __getitem__(self, index: slice) -> 'FiniteGenerator': ...
-    def __getitem__(self, index: Union[int, slice]) -> Union[int, 'FiniteGenerator']:
+    def __getitem__(self, index: slice) -> Self: ...
+    def __getitem__(self, index: Union[int, slice]) -> Union[int, Self]:
         if isinstance(index, slice):
-            return FiniteGenerator(cast(Sequence[int], self._data[index]), dtype=self.dtype)
+            return type(self)(cast(Sequence[int], self._data[index]), dtype=self.dtype)
         return self._data[index]
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[int]:
         return iter(self._data)
 
     def __len__(self) -> int:
@@ -518,24 +518,24 @@ class FiniteGenerator(Generator):
     def __str__(self) -> str:
         return f"FiniteGenerator(size={self.size}, dtype={self.dtype or 'arbitrary'}, start={self.start}, end={self.end}, min={self.min}, max={self.max})"
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"FiniteGenerator[{self.dtype or 'arbitrary'} × {self.size}]"
     
-    def __eq__(self, other) -> bool:
+    def __eq__(self, other: Any) -> bool:
         if not isinstance(other, FiniteGenerator):
             return NotImplemented
         return self.dtype == other.dtype and self._data == other._data
     
-    def __add__(self, other):
+    def __add__(self, other: Union[Sequence[int], Self]) -> Self:
         if isinstance(other, Sequence) and all(isinstance(x, int) for x in other):
-            other = FiniteGenerator(other)
+            other = cast(Self, FiniteGenerator(other))
 
         if not isinstance(other, FiniteGenerator):
             return NotImplemented
         
         return self.concatenate(other)
     
-    def __radd__(self, other):
+    def __radd__(self, other: Union[Sequence[int], Self]) -> Self:
         return self.__add__(other)
 
     @property
@@ -549,7 +549,7 @@ class FiniteGenerator(Generator):
         """
         if not self._compact:
             raise TypeError("Data uses arbitrary-precision integers; memoryview is not available.")
-        return memoryview(cast(array, self._data)).toreadonly()
+        return memoryview(cast(array[int], self._data)).toreadonly()
     
 
 class PeriodicGenerator(Generator):
@@ -562,13 +562,15 @@ class PeriodicGenerator(Generator):
     $[2; 1, 1, 5, 1, 1, 1, 24, 1, 1, 1, 5, \\ldots]$, where the integer part is $2$, the
     pre-period is $[1, 1]$, and the period is $[5, 1, 1, 1, 24, 1, 1, 1]$.
     """
-    def __init__(self, period: Sequence[int] | FiniteGenerator, pre_period: Sequence[int] | FiniteGenerator = (), dtypes: Tuple[Optional[str], Optional[str]] = (None, None), *args, **kwargs):
+    def __init__(self, period: Sequence[int] | FiniteGenerator | Self, pre_period: Sequence[int] | FiniteGenerator = (), dtypes: Tuple[Optional[str], Optional[str]] = (None, None), *args: Any, **kwargs: Any):
         """
         Initialises the periodic generator.
 
         Args:
-            period (Sequence[int] | FiniteGenerator): The finite sequence of positive integers
-                representing the periodic part of the continued fraction.
+            period (Sequence[int] | FiniteGenerator | PeriodicGenerator): The finite sequence of positive integers
+                representing the periodic part of the continued fraction. If a :class:`PeriodicGenerator` instance is passed, 
+                it is wrapped without modification, unless a non-empty pre_period is also provided, in which case the new 
+                instance will reuse the existing period but concatenate the new pre_period to the pre-existing one.
             pre_period (Sequence[int] | FiniteGenerator, optional): The finite sequence of positive
                 integers representing the aperiodic pre-period (default: empty).
             dtypes (Tuple[Optional[str], Optional[str]], optional): Force specific :class:`array.array` typecodes for compact storage of the
@@ -584,6 +586,12 @@ class PeriodicGenerator(Generator):
         """
         if isinstance(period, PeriodicGenerator) and len(pre_period) == 0:
             return  # __new__ returned the existing instance; skip re-initialisation
+        elif isinstance(period, PeriodicGenerator):
+            # Wrapping an existing PeriodicGenerator with a new pre_period and/or dtypes.
+            # The new instance will use the existing period, but the pre-period will be replaced by the provided one (which may be empty).
+            pre_period = FiniteGenerator(pre_period, dtype=dtypes[1] if dtypes[1] is not None else None) + period.pre_period  # concatenate the new pre_period to the existing one, with the specified dtype if provided
+            period = period.period  # extract the existing period to be reused in the new instance
+            
 
         elif len(dtypes) != 2:
             raise ValueError(f"Expected a tuple of two typecodes for 'dtypes' but got {dtypes}")
@@ -624,7 +632,7 @@ class PeriodicGenerator(Generator):
 
 
     @override
-    def insert(self, fg: 'FiniteGenerator', at: int) -> 'PeriodicGenerator':
+    def insert(self, fg: 'FiniteGenerator', at: int, *args: Any, **kwargs: Any) -> 'PeriodicGenerator':
         """
         Inserts a finite generator into this periodic generator at a specified index, returning a 
         new periodic generator that produces the combined sequence. 
@@ -673,10 +681,10 @@ class PeriodicGenerator(Generator):
     def __str__(self) -> str:
         return f"PeriodicGenerator(period={self.period}, pre_period={self.pre_period})"
     
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"PeriodicGenerator(period={repr(self.period)}, pre_period={repr(self.pre_period)})"
     
-    def __new__(cls, period, pre_period=(), *args, **kwargs):
+    def __new__(cls, period: Union[Sequence[int], 'PeriodicGenerator'], pre_period: Union[Sequence[int], 'FiniteGenerator'] = (), *args: Any, **kwargs: Any) -> 'PeriodicGenerator': 
         """
         Returns the existing instance if ``period`` is already a
         :class:`PeriodicGenerator` with no pre-period, avoiding unnecessary
@@ -686,7 +694,7 @@ class PeriodicGenerator(Generator):
             return period
         return object.__new__(cls)
     
-    def __eq__(self, other) -> bool:
+    def __eq__(self, other: Any) -> bool:
         if not isinstance(other, PeriodicGenerator):
             return NotImplemented
         return self.period == other.period and self.pre_period == other.pre_period

@@ -2,7 +2,7 @@ import hashlib
 import math
 from decimal import Decimal, localcontext
 
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 from abc import ABC, abstractmethod
 from ..catena import (
@@ -45,7 +45,7 @@ class Seed:
     def current_state(self) -> bytes:
         return self._state
     
-    def __str__(self):
+    def __str__(self) -> str:
         return f"Seed(initial_state={self._initial_state.decode()}, step={self._step})"
     
     
@@ -70,7 +70,7 @@ class GaussKuzminSHA:
         return int(1 / (2**u - 1))  # Gauss-Kuzmin distribution via uniform transform
     
     @property
-    def __name__(self):
+    def __name__(self) -> str:
         return f"GaussKuzminSHA(seed={self._seed.decode()})"
     
 
@@ -105,7 +105,7 @@ class UniformSHAArbitrary:
             return +result  # quantizes to self._precision before exiting the block
         
     @property
-    def __name__(self):
+    def __name__(self) -> str:
         return f"UniformSHAArbitrary(precision={self._precision})"
         
 
@@ -125,14 +125,14 @@ class GaussKuzminSHAArbitrary:
             return result
         
     @property
-    def __name__(self):
+    def __name__(self) -> str:
         return f"GaussKuzminSHAArbitrary(seed={self._seed.decode()}, precision={self._uniform._precision})"
         
         
 
 class RandomSCF(ABC):    
     @abstractmethod
-    def __make_callable__(self) -> Callable:
+    def __make_callable__(self) -> Callable[[int], int]:
         pass
 
     def generator(self) -> Generator:
@@ -152,7 +152,7 @@ class RandomSCF(ABC):
         pre_period = [func(i+period_size) for i in range(pre_period_size)]
         return PeriodicGenerator(period, pre_period)
     
-    def scf(self, integer_part: int = 0, memoised=False) -> SimpleContinuedFraction:
+    def scf(self, integer_part: int = 0, memoised: bool = False) -> SimpleContinuedFraction:
         if memoised is True:
             return SimpleContinuedFraction(self.cached_generator(), integer_part=integer_part)
         
@@ -169,7 +169,7 @@ class GaussKuzminSCF(RandomSCF):
     def __init__(self, seed: Optional[Seed] = None):
         self._seed = seed or _SEED
 
-    def __make_callable__(self) -> Callable:
+    def __make_callable__(self) -> Callable[[int], int]:
         return GaussKuzminSHA(self._seed.state)
 
 
@@ -178,5 +178,5 @@ class GaussKuzminArbitrarySCF(RandomSCF):
         self._seed = seed or _SEED
         self._precision = precision
 
-    def __make_callable__(self) -> Callable:
+    def __make_callable__(self) -> Callable[[int], int]:
         return GaussKuzminSHAArbitrary(self._seed.state, self._precision)

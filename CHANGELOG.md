@@ -24,14 +24,43 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 - `_inverse` renamed to `_cached_inverse` across all three SCF classes.
   *(The rename was part of 0.5.0 but only applied to the slot declaration;
   the attribute is fully unified as `_cached_inverse` from this release.)*
+- `PeriodicGenerator.__init__` now handles the case where an existing
+  `PeriodicGenerator` is passed as `period` together with a non-empty
+  `pre_period`: the new instance reuses the existing period and *prepends*
+  the supplied pre-period to the existing one, rather than raising.
+- `FiniteGenerator.advance`, `insert`, `concatenate`, `__getitem__`,
+  `__add__`, and `__radd__` now construct results via `type(self)(...)` and
+  return `Self`, so subclasses get back the correct type.
+- `FiniteGenerator` now inherits `Sized` explicitly.
 
 ### Fixed
 
-- Comprehensive mypy-compatible type annotations across the codebase:
-  covariant return types use `Self`; nullable parameters use `Optional[T]`;
-  `@overload` stubs added to `FiniteConvergentView.__getitem__`; `cast()`
-  used for narrowed generator properties; slot annotations guarded under
-  `TYPE_CHECKING`.  Running `mypy catena/` now reports zero errors.
+- `mypy --strict catena` now reports zero errors.  Changes by module:
+  - **cache.py** — `BaseCache` parameterised to `UserDict[int, Any]`;
+    all property return types annotated; `func` callback typed
+    `Callable[[int], Any]`; mutating stubs (`fromkeys`, `pop`, `popitem`,
+    `setdefault`, `update`, `__delitem__`, `__or__`) retyped `-> NoReturn`
+    (previously `-> None`, which was wrong and tripped the `[override]`
+    check against the `UserDict` supertype).
+  - **generators.py** — `*args` / `**kwargs` uniformly typed as `Any`;
+    `__new__` signatures fully annotated; `__iter__` typed `-> Iterator[int]`;
+    `__repr__` typed `-> str`; `__eq__` typed.
+  - **catena.py** — `__setattr__`, property setters, `__str__`, `__repr__`,
+    `__len__`, `__bool__`, `__hash__`, `__eq__` annotated across all three
+    SCF classes; `PeriodicSimpleContinuedFraction.__float__` uses
+    `cast(float, ...)` to suppress the `Any` escape from
+    `int.__pow__(float)` (no matching typeshed overload).
+  - **mathlib/convert.py** — `from_quadratic_surd_to_scf` and
+    `from_quadratic_surd_to_conjugate_scf` return types annotated.
+  - **mathlib/arithmetic.py** — `gcd` now imported directly from `math`
+    instead of being re-exported from `.core`.
+  - **numbers/randoms.py** — `__str__`, `__name__`, `__make_callable__`
+    (typed `-> Callable[[int], int]`), and `memoised` parameter annotated.
+
+### Removed
+
+- Dead `if __name__ == "__main__"` benchmark block removed from
+  `catena/mathlib/metric.py`.
 
 ### Tests
 

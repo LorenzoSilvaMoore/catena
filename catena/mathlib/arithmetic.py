@@ -1,8 +1,9 @@
 
 from .core import (
     IntPair,
-    gcd
     )
+
+from math import gcd
 
 def add_fractions(a: IntPair, b: IntPair) -> IntPair:
     """

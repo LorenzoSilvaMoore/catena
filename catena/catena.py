@@ -38,7 +38,7 @@ from fractions import Fraction
 
 from .cache import BaseCache
 
-from typing import Callable, Self, Tuple, Optional, Union, cast, override, TYPE_CHECKING
+from typing import Callable, Self, Tuple, Optional, Union, cast, override, TYPE_CHECKING, Any
 from decimal import Decimal
 from collections.abc import Sequence
 
@@ -193,7 +193,7 @@ class SimpleContinuedFraction:
         super().__setattr__("_tail_cache", BaseCache(func=self._tail_convergent))
         super().__setattr__("_cached_inverse", self._empty_cached_entry) # Initialize the cached inverse as a weak reference to None
     
-    def __setattr__(self, name, value):
+    def __setattr__(self, name: str, value: Any) -> None:
         """
         Guards frozen attributes against reassignment after construction.
 
@@ -224,7 +224,7 @@ class SimpleContinuedFraction:
         return self._integer_part
     
     @integer_part.setter
-    def integer_part(self, n: int):
+    def integer_part(self, n: int) -> None:
         """
         Sets the integer part.
 
@@ -268,10 +268,10 @@ class SimpleContinuedFraction:
         inst.integer_part = integer_part
         return inst
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"SimpleContinuedFraction(generator={self.generator}, integer_part={self.integer_part})"
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"SimpleContinuedFraction(generator={self.generator}, integer_part={self.integer_part}, cache_handler={self.cache_handler})"
 
     def shift(self, n: int) -> Self:
@@ -371,7 +371,7 @@ class SimpleContinuedFraction:
             tuple[int, int]: ``(numerator, denominator)`` of the tail
             convergent at depth ``n``.
         """
-        return self._tail_cache[n]
+        return cast(Tuple[int, int], self._tail_cache[n])
     
     def _tail_convergent(self, n: int) -> Tuple[int, int]:
         """
@@ -428,11 +428,11 @@ class SimpleContinuedFraction:
         if start > n:
             # n is already cached; __getitem__ will have returned before
             # reaching _tail_convergent, but guard for direct calls.
-            return cache[n]
+            return cast(Tuple[int, int], cache[n])
 
         # Seed the two values needed to begin the loop.
-        prev2 = self._tail_cache[start - 2]
-        prev1 = self._tail_cache[start - 1]
+        prev2 = cast(Tuple[int, int], self._tail_cache[start - 2])
+        prev1 = cast(Tuple[int, int], self._tail_cache[start - 1])
 
         for i in range(start, n + 1):
             a = int(self.generator(i))
@@ -608,17 +608,17 @@ class FiniteSimpleContinuedFraction(SimpleContinuedFraction):
         """A view of the convergents of the finite SCF, supporting slicing and iteration."""
         return FiniteConvergentView(self)
     
-    def __str__(self):
+    def __str__(self) -> str:
         return f"FiniteSimpleContinuedFraction(partial_quotients={self.partial_quotients}, integer_part={self.integer_part})"
     
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"FiniteSimpleContinuedFraction(generator={self.generator}, integer_part={self.integer_part}, cache_handler={self.cache_handler})"
     
-    def __len__(self):
+    def __len__(self) -> int:
         """Returns :attr:`size` (number of partial quotients in the tail)."""
         return self.size
     
-    def __add__(self, other):
+    def __add__(self, other: Any) -> 'FiniteSimpleContinuedFraction':
         """
         Adds an integer or another :class:`FiniteSimpleContinuedFraction`.
 
@@ -645,10 +645,10 @@ class FiniteSimpleContinuedFraction(SimpleContinuedFraction):
             
         return super().__add__(other) # if int, will shift the integer part; else will return NotImplemented
 
-    def __sub__(self, other):
-        return self + (-other)
+    def __sub__(self, other: Any) -> 'FiniteSimpleContinuedFraction':
+        return self.__add__(-other)
 
-    def __mul__(self, other):
+    def __mul__(self, other: Any) -> 'FiniteSimpleContinuedFraction':
         """
         Multiplies by an integer, another :class:`FiniteSimpleContinuedFraction`, or a rational/decimal.
 
@@ -673,7 +673,7 @@ class FiniteSimpleContinuedFraction(SimpleContinuedFraction):
 
         return NotImplemented
 
-    def __truediv__(self, other):
+    def __truediv__(self, other: Any) -> 'FiniteSimpleContinuedFraction':
         """
         Divides by an integer, another :class:`FiniteSimpleContinuedFraction`, or a rational/decimal.
 
@@ -716,11 +716,11 @@ class FiniteSimpleContinuedFraction(SimpleContinuedFraction):
         tc = self.terminal_convergent
         return Decimal(tc[0])/Decimal(tc[1])
 
-    def __bool__(self):
+    def __bool__(self) -> bool:
         """Returns ``False`` only when ``integer_part == 0`` and the tail is empty."""
         return self.integer_part != 0 or len(self) != 0
 
-    def __eq__(self, value):
+    def __eq__(self, value: Any) -> bool:
         """
         Equality comparison.
 
@@ -743,12 +743,12 @@ class FiniteSimpleContinuedFraction(SimpleContinuedFraction):
         else:
             return NotImplemented
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         """Hashes the terminal convergent, so that equal SCFs have the same hash."""
         # array.array are unhashable, so we cannot hash the generator directly. 
         return hash(self.terminal_convergent)
 
-    def __neg__(self):
+    def __neg__(self) -> 'FiniteSimpleContinuedFraction':
         if self.size <= 2: # For general negation, we ned a1 and a2 to be accessible, so here we do it by hand.
             return FiniteSimpleContinuedFraction.from_rational(-Fraction(*self.terminal_convergent))
         
@@ -935,7 +935,7 @@ class PeriodicSimpleContinuedFraction(SimpleContinuedFraction):
         super().__setattr__('_cached_conjugate', self._empty_cached_entry)
         super().__init__(generator=generator, integer_part=integer_part)
 
-    def __setattr__(self, name, value):
+    def __setattr__(self, name: str, value: Any) -> None:
         if name in {"_quadratic_coefficients", "_quadratic_surd", "_cached_conjugate"} and hasattr(self, name):
             current = getattr(self, name)
             # Allow overwrite if still the sentinel or if the weakref has been collected
@@ -968,10 +968,10 @@ class PeriodicSimpleContinuedFraction(SimpleContinuedFraction):
     def __float__(self) -> float:
         """Returns the value of the SCF as a Python ``float``."""
         P, Q, D = self.quadratic_surd()
-        return (P + D**0.5)/Q
+        return cast(float, (P + D**0.5) / Q)
     
     @override
-    def __neg__(self):
+    def __neg__(self) -> Self:
         """Returns the additive inverse of the SCF, i.e., a new SCF representing -x if self represents x."""
         # The special case of periodic SCFs allows to define a negation operation trivially.
         # If the value of the SCF is (P + √D)/Q, then its negation is (-P - √D)/Q,
@@ -980,7 +980,7 @@ class PeriodicSimpleContinuedFraction(SimpleContinuedFraction):
         negated_surd = (P, -Q, D)
         return self.from_quadratic_surd(*negated_surd)
 
-    def __eq__(self, other):
+    def __eq__(self, other: Any) -> bool:
         """
         Equality comparison.
 
@@ -991,7 +991,7 @@ class PeriodicSimpleContinuedFraction(SimpleContinuedFraction):
         
         return self.quadratic_surd() == other.quadratic_surd()
     
-    def __hash__(self):
+    def __hash__(self) -> int:
         """Hashes the quadratic surd parameters, so that equal SCFs have the same hash."""
         return hash(self.quadratic_surd())
 

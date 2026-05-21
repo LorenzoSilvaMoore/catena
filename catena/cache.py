@@ -18,10 +18,11 @@ from __future__ import annotations
 
 import heapq
 
-from typing import Any, Callable, Optional, override
+from typing import Any, Callable, Iterable, NoReturn, Optional, cast, override, Self
 from collections import UserDict
 
-class BaseCache(UserDict):
+
+class BaseCache(UserDict[int, Any]):
     """
     A self-computing, append-only cache that unifies the roles of the old
     :class:`OrdinalCache` and :class:`CacheHandler` into a single object.
@@ -51,7 +52,7 @@ class BaseCache(UserDict):
         This class is experimental.  Its interface is subject to change
         without notice.
     """
-    def __init__(self, *args: Any, func: Callable, maxsize: Optional[int] = None, prune_key: Optional[Callable[[int], tuple[int, Optional[str]]]] = None, seed: Optional[dict] = None, **kwargs: Any) -> None:
+    def __init__(self, *args: Any, func: Callable[[int], Any], maxsize: Optional[int] = None, prune_key: Optional[Callable[[int], tuple[int, Optional[str]]]] = None, seed: Optional[dict[int, Any]] = None, **kwargs: Any) -> None:
         """
         Initialises the cache.
 
@@ -66,7 +67,7 @@ class BaseCache(UserDict):
                 positional arguments forwarded to :meth:`prune`.  Defaults
                 to ``lambda k: (max(k - 1, 2),)``, which retains the
                 ``max(maxsize - 1, 2)`` largest-keyed entries.
-            seed (dict, optional): Pre-computed ``{key: value}`` pairs to
+            seed (Optional[dict[int, Any]], optional): Pre-computed ``{key: value}`` pairs to
                 load into the cache at construction time.  Entries are
                 inserted directly into the underlying store without
                 incrementing :attr:`call_count` or :attr:`read_count`.
@@ -168,7 +169,7 @@ class BaseCache(UserDict):
         self[key] = result
         return result
     
-    def __repr__(self):
+    def __repr__(self) -> str:
         """
         Returns a concise string representation showing the bound function,
         call/read counts, and current size.
@@ -176,51 +177,51 @@ class BaseCache(UserDict):
         return f"BaseCache(func={self.func_name}, calls={self.call_count}, reads={self.read_count}, size={len(self)})"
     
     @property
-    def func(self):
+    def func(self) -> Callable[[int], Any]:
         """The function whose results are being cached."""
         return self._func
     
     @property
-    def func_name(self):
+    def func_name(self) -> str:
         """The name of the cached function, if available."""
         return self._func_name
     
     @property
-    def read_count(self):
+    def read_count(self) -> int:
         """Number of cache hits since initialisation."""
         return self._read_count
 
     @property
-    def write_count(self):
+    def write_count(self) -> int:
         """Number of cache writes since initialisation."""
         return self._write_count
     
     @property
-    def call_count(self):
+    def call_count(self) -> int:
         """Number of cache misses (underlying function calls) since initialisation."""
         return self._call_count
     
     @property
-    def smallest_key(self):
+    def smallest_key(self) -> Optional[int]:
         """The smallest key stored so far, or ``None`` if the cache is empty."""
         if not self.data:
             return None
-        return self._smallest_key if self._smallest_key != float('inf') else None
+        return cast(Optional[int], self._smallest_key if self._smallest_key != float('inf') else None)
     
     @property
-    def largest_key(self):
+    def largest_key(self) -> Optional[int]:
         """The largest key stored so far, or ``None`` if the cache is empty."""
         if not self.data:
             return None
-        return self._largest_key if self._largest_key != float('-inf') else None
+        return cast(Optional[int], self._largest_key if self._largest_key != float('-inf') else None)
     
     @property
-    def maxsize(self):
+    def maxsize(self) -> Optional[int]:
         """The maximum size of the cache, or ``None`` if unlimited."""
         return self._maxsize
     
     @property
-    def stats(self):
+    def stats(self) -> dict[str, Any]:
         """A summary of the cache's current statistics as a dictionary."""
         return {
             "func": self.func_name,
@@ -231,15 +232,15 @@ class BaseCache(UserDict):
             "smallest_key": self.smallest_key,
             "largest_key": self.largest_key,
             "maxsize": self.maxsize,
-            "prune_key": self._prune_key(self.maxsize) if self._maxsize is not None else None
+            "prune_key": self._prune_key(cast(int, self.maxsize)) if self._maxsize is not None else None
         }
     
     @property
-    def cache(self):
+    def cache(self) -> Self:
         """Returns self for backward compatibility."""
         return self
     
-    def prune(self, n: int = 2, order: Optional[str] = 'asc'):
+    def prune(self, n: int = 2, order: Optional[str] = 'asc') -> None:
         """
         Retains only the ``n`` largest-keyed entries, discarding the rest.
 
@@ -276,7 +277,7 @@ class BaseCache(UserDict):
             self._smallest_key = min(new_data)
             self._largest_key = max(new_data)
     
-    def reset(self):
+    def reset(self) -> None:
         """
         Clears all cached entries and resets :attr:`call_count`,
         :attr:`read_count`, :attr:`smallest_key`, and :attr:`largest_key`
@@ -289,7 +290,7 @@ class BaseCache(UserDict):
         self._call_count = 0
 
     @override
-    def clear(self):
+    def clear(self) -> None:
         """
         Clears all cached entries and resets :attr:`smallest_key` and
         :attr:`largest_key`, but *preserves* :attr:`call_count` and
@@ -344,7 +345,7 @@ class BaseCache(UserDict):
         return default
     
     @override
-    def setdefault(self, key, default=None):
+    def setdefault(self, key: Any, default: Any = None) -> NoReturn:
         """
         Not supported.  Raises :exc:`NotImplementedError`.
 
@@ -354,7 +355,7 @@ class BaseCache(UserDict):
         raise NotImplementedError("setdefault is not supported by BaseCache due to immutability guarantees. Use direct assignment instead.")
     
     @override
-    def update(self, *args, **kwargs):
+    def update(self, *args: Any, **kwargs: Any) -> NoReturn:
         """
         Not supported.  Raises :exc:`NotImplementedError`.
 
@@ -364,7 +365,7 @@ class BaseCache(UserDict):
         raise NotImplementedError("update is not supported by BaseCache due to immutability guarantees. Use direct assignment instead.")
     
     @override
-    def pop(self, key, *args):
+    def pop(self, key: Any, *args: Any) -> NoReturn:
         """
         Not supported.  Raises :exc:`NotImplementedError`.
 
@@ -375,7 +376,7 @@ class BaseCache(UserDict):
     
     @classmethod
     @override
-    def fromkeys(cls, iterable, value=None):
+    def fromkeys(cls, iterable: Iterable[Any], value: Any = None) -> NoReturn:
         """
         Not supported.  Raises :exc:`NotImplementedError`.
 
@@ -385,7 +386,7 @@ class BaseCache(UserDict):
         raise NotImplementedError("fromkeys is not supported by BaseCache due to construnction requirements. Create a new instance and assign values directly instead.")
     
     @override
-    def __delitem__(self, key):
+    def __delitem__(self, key: Any) -> NoReturn:
         """
         Not supported.  Raises :exc:`NotImplementedError`.
 
@@ -395,7 +396,7 @@ class BaseCache(UserDict):
         raise NotImplementedError("Deletion of individual keys is not supported by BaseCache due to immutability guarantees. Use prune() to remove entries instead.")
     
     @override
-    def popitem(self):
+    def popitem(self) -> NoReturn:
         """
         Not supported.  Raises :exc:`NotImplementedError`.
 
@@ -405,7 +406,7 @@ class BaseCache(UserDict):
         raise NotImplementedError("popitem is not supported by BaseCache due to immutability guarantees. Use prune() to remove entries instead.")
     
     @override
-    def __or__(self, other):
+    def __or__(self, other: Any) -> NoReturn:
         """
         Not supported.  Raises :exc:`NotImplementedError`.
 
