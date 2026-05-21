@@ -16,7 +16,7 @@ def product_digit_count(arr: Sequence[int]) -> int:
     Returns:
         int: The total number of digits in the product of the sequence.
     """
-    tot = 0
+    tot = 0.0
     for num in arr:
         tot += log10(num)
     

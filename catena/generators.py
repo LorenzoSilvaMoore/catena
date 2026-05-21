@@ -26,7 +26,7 @@ from collections.abc import Callable, Collection, Sequence
 from array import array
 
 from math import gcd
-from typing import Optional, Tuple, override
+from typing import Optional, Tuple, Union, cast, override, TYPE_CHECKING
 
 from .cache import BaseCache
 from .strings import safe_int_str
@@ -34,7 +34,7 @@ from .mathlib.core import get_sign
 
 
 
-class Generator(Callable):
+class Generator:
     """
     A validated callable wrapper for partial-quotient generator functions.
 
@@ -137,7 +137,7 @@ class Generator(Callable):
         Returns:
             Generator: A new generator that produces the combined sequence with ``fg`` prepended to this generator.
         """
-        return self.insert(fg, at=0, *args, **kwargs)
+        return self.insert(fg, 0, *args, **kwargs)
         
     def __call__(self, n: int) -> int:
         """
@@ -188,15 +188,19 @@ class CachedGenerator(Generator):
     and its result stored; subsequent calls for the same *n* are served
     directly from the cache.
     """
+    if TYPE_CHECKING:
+        _cache_handler: BaseCache  # for type checkers; not an actual class attribute
 
-    def __init__(self, generator: Callable[[int], int], *args, seed: dict = None, **kwargs):
+    def __init__(self, generator: Union[Callable[[int], int], 'CachedGenerator'], *args, seed: Optional[dict] = None, **kwargs):
         """
         Initialises the cached generator.
 
         Args:
-            generator (Callable[[int], int]): A callable that maps a
-                non-negative index *n* to a strictly positive integer.
-            seed (dict, optional): Pre-computed ``{key: value}`` pairs to
+            generator (Callable[[int], int] | CachedGenerator): A callable that maps a
+                non-negative index *n* to a strictly positive integer. If a 
+                :class:`CachedGenerator` instance is passed, it is wrapped without
+                modification (see :meth:`__new__`).
+            seed (Optional[dict], optional): Pre-computed ``{key: value}`` pairs to
                 load into the cache at construction time.  Forwarded to
                 :class:`~catena.cache.BaseCache`.  Does not affect
                 statistics counters.
@@ -209,7 +213,7 @@ class CachedGenerator(Generator):
         if isinstance(generator, CachedGenerator):
             generator = generator._cache_handler.func
 
-        super().__init__(generator=generator, *args, **kwargs)
+        super().__init__(generator, *args, **kwargs)
         self._cache_handler = BaseCache(func=generator, seed=seed)
         def _cached_generator(n: int) -> int:
             return self._cache_handler.cache[n]
@@ -287,7 +291,7 @@ class CachedGenerator(Generator):
 
     def reset_cache(self) -> None:
         """Clears all entries from the cache, freeing the memoised results."""
-        self._cache_handler.reset_cache()
+        self._cache_handler.reset()
 
     def __str__(self) -> str:
         return f"CachedGenerator({self._generator_name}, cache_size={len(self.cache)})"
@@ -317,13 +321,20 @@ class FiniteGenerator(Generator):
         code: (0, (1 << (array(code, []).itemsize * 8)) - 1) for code in _dtypes
     }
 
-    def __init__(self, data: Sequence[int], dtype: str = None, *args, **kwargs):
+    if TYPE_CHECKING:
+        _data: Union[array, tuple]  # for type checkers; not an actual class attribute
+        _compact: bool
+        _min: Optional[int]
+        _max: Optional[int]
+
+    def __init__(self, data: Union[Sequence[int], 'FiniteGenerator'], dtype: Optional[str] = None, *args, **kwargs):
         """
         Initialises the finite generator from a sequence of positive integers.
 
         Args:
-            data (Sequence[int]): The sequence of strictly positive partial
-                quotients.
+            data (Sequence[int] | FiniteGenerator): The sequence of strictly positive partial
+                quotients. If a :class:`FiniteGenerator` instance is passed, it is wrapped without
+                modification (see :meth:`__new__`).
             dtype (str, optional): Force a specific unsigned array typecode
                 (one of ``'B'``, ``'H'``, ``'I'``, ``'L'``, ``'Q'``).  When
                 ``None`` (default) the smallest fitting typecode is chosen
@@ -383,7 +394,7 @@ class FiniteGenerator(Generator):
                 raise IndexError(f"Index must be between 0 and {size - 1}, got {n}.")
             return self._data[n]
 
-        super().__init__(generator=_at, *args, **kwargs)
+        super().__init__(_at, *args, **kwargs)
 
     @override
     def advance(self, n: int) -> 'FiniteGenerator':
@@ -417,25 +428,21 @@ class FiniteGenerator(Generator):
         dtype = max((self.dtype or 'Z'), (fg.dtype or 'Z'))
         # cast to the larger typecode to accommodate for all values in the combined sequence
         # and avoid TypeError from array concatenation.
-        if dtype != 'Z':
-            if dtype != self.dtype:
-                self_data = array(dtype, self._data) if self._compact else self._data
-            else:            
-                self_data = self._data
-            
-            if dtype != fg.dtype:
-                fg_data = array(dtype, fg._data) if fg._compact else fg._data
-            else:
-                fg_data = fg._data
-        else:
-            self_data = list(self._data)
-            fg_data = list(fg._data)
-        
-        new_data = self_data[:at] + fg_data + self_data[at:]
-        
-        dtype = None if dtype == 'Z' else dtype
 
-        return FiniteGenerator(new_data, dtype=dtype)
+        new_data: array | tuple
+        if dtype != 'Z':
+            # When dtype != 'Z', both self and fg use compact array storage (_compact is True)
+            s: array = array(dtype, self._data) if dtype != self.dtype else cast(array, self._data)
+            f: array = array(dtype, fg._data) if dtype != fg.dtype else cast(array, fg._data)
+            new_data = s[:at] + f + s[at:]
+        else:
+            ts = cast(tuple, self._data)
+            tf = cast(tuple, fg._data)
+            new_data = ts[:at] + tf + ts[at:]
+
+        final_dtype = None if dtype == 'Z' else dtype
+
+        return FiniteGenerator(new_data, dtype=final_dtype)
 
     def __new__(cls, data, dtype=None, *args, **kwargs):
         if isinstance(data, cls):
@@ -450,7 +457,7 @@ class FiniteGenerator(Generator):
     @property
     def dtype(self) -> str | None:
         """Array typecode used for compact storage, or ``None`` if arbitrary-precision."""
-        return self._data.typecode if self._compact else None
+        return cast(array, self._data).typecode if self._compact else None
 
     @property
     def is_compact(self) -> bool:
@@ -458,22 +465,22 @@ class FiniteGenerator(Generator):
         return self._compact
     
     @property
-    def min(self) -> int:
+    def min(self) -> Optional[int]:
         """Smallest value in the sequence, or ``None`` if empty."""
         return self._min
 
     @property
-    def max(self) -> int:
+    def max(self) -> Optional[int]:
         """Largest value in the sequence, or ``None`` if empty."""
         return self._max
     
     @property
-    def start(self) -> int:
+    def start(self) -> Optional[int]:
         """First element of the sequence, or ``None`` if empty."""
         return self._data[0] if self.size > 0 else None
     
     @property
-    def end(self) -> int:
+    def end(self) -> Optional[int]:
         """Last element of the sequence, or ``None`` if empty."""
         return self._data[-1] if self.size > 0 else None
 
@@ -511,7 +518,7 @@ class FiniteGenerator(Generator):
         """
         if not self._compact:
             raise TypeError("Data uses arbitrary-precision integers; memoryview is not available.")
-        return memoryview(self._data).toreadonly()
+        return memoryview(cast(array, self._data)).toreadonly()
     
 
 class PeriodicGenerator(Generator):
@@ -524,16 +531,16 @@ class PeriodicGenerator(Generator):
     $[2; 1, 1, 5, 1, 1, 1, 24, 1, 1, 1, 5, \\ldots]$, where the integer part is $2$, the
     pre-period is $[1, 1]$, and the period is $[5, 1, 1, 1, 24, 1, 1, 1]$.
     """
-    def __init__(self, period: Collection[int], pre_period: Collection[int] = (), dtypes: Optional[Tuple[str, str]] = None, *args, **kwargs):
+    def __init__(self, period: Sequence[int] | FiniteGenerator, pre_period: Sequence[int] | FiniteGenerator = (), dtypes: Tuple[Optional[str], Optional[str]] = (None, None), *args, **kwargs):
         """
         Initialises the periodic generator.
 
         Args:
-            period (Collection[int]): The finite sequence of positive integers
+            period (Sequence[int] | FiniteGenerator): The finite sequence of positive integers
                 representing the periodic part of the continued fraction.
-            pre_period (Collection[int], optional): The finite sequence of positive
+            pre_period (Sequence[int] | FiniteGenerator, optional): The finite sequence of positive
                 integers representing the aperiodic pre-period (default: empty).
-            dtypes (Tuple[str, str], optional): Force specific :class:`array.array` typecodes for compact storage of the
+            dtypes (Tuple[Optional[str], Optional[str]], optional): Force specific :class:`array.array` typecodes for compact storage of the
                 period and pre-period respectively (each one of ``'B'``, ``'H'``, ``'I'``, ``'L'``, ``'Q'``).
                 When ``None``, the smallest fitting typecode is chosen automatically. 
                     Note: (str, None) and (None, str) are also accepted to specify a typecode 
@@ -542,12 +549,10 @@ class PeriodicGenerator(Generator):
         Raises:
             ValueError: If any value in ``period`` or ``pre_period`` is not a strictly
                 positive integer.
+            ValueError: If ``dtypes`` is not a tuple of two typecodes.
         """
         if isinstance(period, PeriodicGenerator) and len(pre_period) == 0:
             return  # __new__ returned the existing instance; skip re-initialisation
-
-        if dtypes is None:
-            dtypes = (None, None)
 
         elif len(dtypes) != 2:
             raise ValueError(f"Expected a tuple of two typecodes for 'dtypes' but got {dtypes}")
@@ -565,7 +570,7 @@ class PeriodicGenerator(Generator):
             def _at(n: int) -> int:
                 return self._period[n % len(self._period)]
 
-        super().__init__(generator=_at, *args, **kwargs)
+        super().__init__(_at, *args, **kwargs)
 
     @override
     def advance(self, n: int) -> 'PeriodicGenerator':

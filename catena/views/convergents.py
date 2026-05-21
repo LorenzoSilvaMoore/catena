@@ -17,10 +17,10 @@ Both classes are lightweight wrappers (``__slots__``) that hold a single
 reference to the underlying SCF; they perform no computation themselves.
 """
 from __future__ import annotations
-from typing import TYPE_CHECKING, TypeVar
+from typing import TYPE_CHECKING, TypeVar, overload, override
 
 if TYPE_CHECKING:
-    from ..catena import SimpleContinuedFraction
+    from ..catena import SimpleContinuedFraction, FiniteSimpleContinuedFraction
 
 from collections.abc import Iterator, Callable
 
@@ -55,7 +55,8 @@ class ConvergentsView:
         Args:
             scf (SimpleContinuedFraction): The SCF instance to wrap.
         """
-        object.__setattr__(self, '_scf', scf)
+        #object.__setattr__(self, '_scf', scf)
+        self._scf = scf
 
     def __getitem__(self, n: int) -> tuple[int, int]:
         """
@@ -183,6 +184,20 @@ class FiniteConvergentView(ConvergentsView):
     """
     __slots__ = ()
 
+    if TYPE_CHECKING:
+        _scf: FiniteSimpleContinuedFraction
+
+    def __init__(self, scf: 'FiniteSimpleContinuedFraction'):
+        if not scf.is_finite:
+            raise TypeError("FiniteConvergentView can only be used with finite SCF instances.")
+        
+        super().__init__(scf)
+
+    @overload
+    def __getitem__(self, n: int) -> tuple[int, int]: ...
+    @overload
+    def __getitem__(self, n: slice) -> list[tuple[int, int]]: ...
+    @override
     def __getitem__(self, n: int | slice) -> tuple[int, int] | list[tuple[int, int]]:
         """
         Returns the *n*-th convergent, or a list of convergents for a slice.

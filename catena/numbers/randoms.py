@@ -2,7 +2,7 @@ import hashlib
 import math
 from decimal import Decimal, localcontext
 
-from typing import Callable
+from typing import Callable, Optional
 
 from abc import ABC, abstractmethod
 from ..catena import (
@@ -21,7 +21,7 @@ import uuid
 
 
 class Seed:
-    def __init__(self, initial_state: str|int = None):
+    def __init__(self, initial_state: Optional[str|int] = None):
         self._state = str(initial_state).encode() if initial_state is not None else str(uuid.uuid4()).encode()
         self._step = 0
         self._initial_state = self._state
@@ -54,8 +54,11 @@ _SEED = Seed()  # global seed for default random generators
 
 # --- SHA-256 based (O(1), cryptographic uniformity) ---
 class GaussKuzminSHA:
-    def __init__(self, seed: str|int = None):
-        self._seed = str(seed).encode() if seed is not None else str(uuid.uuid4()).encode()
+    def __init__(self, seed: Optional[str|int|bytes] = None):
+        if isinstance(seed, bytes):
+            self._seed = seed
+        else:
+            self._seed = str(seed).encode() if seed is not None else str(uuid.uuid4()).encode()
 
     def _uniform(self, n: int) -> float:
         h = hashlib.sha256(self._seed + n.to_bytes(8, 'big')).digest()
@@ -107,8 +110,11 @@ class UniformSHAArbitrary:
         
 
 class GaussKuzminSHAArbitrary:
-    def __init__(self, seed: str|int = None, precision: int = 50):
-        self._seed = str(seed).encode() if seed is not None else str(uuid.uuid4()).encode()
+    def __init__(self, seed: Optional[str|int|bytes] = None, precision: int = 50):
+        if isinstance(seed, bytes):
+            self._seed = seed
+        else:
+            self._seed = str(seed).encode() if seed is not None else str(uuid.uuid4()).encode()
         self._uniform = UniformSHAArbitrary(precision)
 
     def __call__(self, n: int) -> int:
@@ -126,21 +132,21 @@ class GaussKuzminSHAArbitrary:
 
 class RandomSCF(ABC):    
     @abstractmethod
-    def __make_callable__(self, generator) -> callable:
+    def __make_callable__(self) -> Callable:
         pass
 
-    def generator(self) -> int:
+    def generator(self) -> Generator:
         return Generator(self.__make_callable__())
     
-    def cached_generator(self) -> int:
+    def cached_generator(self) -> CachedGenerator:
         return CachedGenerator(self.__make_callable__())
     
-    def finite_generator(self, size: int) -> int:
+    def finite_generator(self, size: int) -> FiniteGenerator:
         func = self.__make_callable__()
         data = [func(i) for i in range(size)]
         return FiniteGenerator(data)
     
-    def periodic_generator(self, period_size: int, pre_period_size: int = 0) -> int:
+    def periodic_generator(self, period_size: int, pre_period_size: int = 0) -> PeriodicGenerator:
         func = self.__make_callable__()
         period = [func(i) for i in range(period_size)]
         pre_period = [func(i+period_size) for i in range(pre_period_size)]
@@ -160,17 +166,17 @@ class RandomSCF(ABC):
     
 
 class GaussKuzminSCF(RandomSCF):
-    def __init__(self, seed: Seed = None):
+    def __init__(self, seed: Optional[Seed] = None):
         self._seed = seed or _SEED
 
-    def __make_callable__(self) -> callable:
+    def __make_callable__(self) -> Callable:
         return GaussKuzminSHA(self._seed.state)
 
 
 class GaussKuzminArbitrarySCF(RandomSCF):
-    def __init__(self, precision: int = 50, seed: Seed = None,):
+    def __init__(self, precision: int = 50, seed: Optional[Seed] = None,):
         self._seed = seed or _SEED
         self._precision = precision
 
-    def __make_callable__(self) -> callable:
+    def __make_callable__(self) -> Callable:
         return GaussKuzminSHAArbitrary(self._seed.state, self._precision)

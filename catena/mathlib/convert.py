@@ -57,6 +57,7 @@
 from fractions import Fraction
 from decimal import Decimal, InvalidOperation
 from math import isqrt
+from typing import Optional
 
 from .core import euclidean_step, simplify
 from .quadratic import normalize_quadratic_surd
@@ -121,7 +122,7 @@ def from_rational_to_scf(r: Rational) -> tuple[int, list[int]]:
     return scf[0], scf[1:]
 
 
-def from_float_to_rational(f: float, limit_denominator: int = None) -> Rational:
+def from_float_to_rational(f: float, limit_denominator: Optional[int] = None) -> Rational:
     """
     Converts a floating-point number to a rational approximation.
 
@@ -140,7 +141,7 @@ def from_float_to_rational(f: float, limit_denominator: int = None) -> Rational:
         r = Fraction(f).limit_denominator(limit_denominator)
     return r.numerator, r.denominator
 
-def from_float_to_scf(f: float, limit_denominator: int = None) -> tuple[int, list[int]]:
+def from_float_to_scf(f: float, limit_denominator: Optional[int] = None) -> tuple[int, list[int]]:
     """
     Converts a floating-point number to its simple continued fraction (SCF) representation.
 
@@ -213,7 +214,7 @@ def from_quadratic_surd_to_scf(P: int, Q: int, D: int):
         a -= 1                    # need to use floating point approximation for s.
     
     visited = dict()
-    scf = []
+    scf: list[int] = []
     while (m, d) not in visited:
         visited[(m, d)] = len(scf)
         scf.append(a)

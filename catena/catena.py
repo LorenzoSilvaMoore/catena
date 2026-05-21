@@ -37,7 +37,7 @@ from fractions import Fraction
 
 from .cache import BaseCache
 
-from typing import Callable, Tuple, Optional, override
+from typing import Callable, Self, Tuple, Optional, Union, cast, override, TYPE_CHECKING
 from decimal import Decimal
 from collections.abc import Sequence
 
@@ -155,6 +155,13 @@ class SimpleContinuedFraction:
         "_cached_inverse",
         "_integer_part"
     )
+    is_finite = False  # Sentinel value for type checking; overridden to True in FSCF
+
+    if TYPE_CHECKING:
+        _generator: Generator
+        _tail_cache: BaseCache
+        _cached_inverse: Optional['SimpleContinuedFraction']
+        _integer_part: int
 
     def __init__(self, generator: Callable[[int], int], integer_part: int = 0):
         """
@@ -242,7 +249,7 @@ class SimpleContinuedFraction:
         return ConvergentsView(self)
     
     @classmethod
-    def _from_shared(cls, source: 'SimpleContinuedFraction', integer_part: int) -> 'SimpleContinuedFraction':
+    def _from_shared(cls, source: 'SimpleContinuedFraction', integer_part: int) -> Self:
         """
         Creates a new instance that shares the generator and tail cache of
         ``source``, but has a different ``integer_part``.
@@ -262,7 +269,7 @@ class SimpleContinuedFraction:
     def __repr__(self):
         return f"SimpleContinuedFraction(generator={self.generator}, integer_part={self.integer_part}, cache_handler={self.cache_handler})"
 
-    def shift(self, n: int) -> 'SimpleContinuedFraction':
+    def shift(self, n: int) -> Self:
         """
         Returns a new SCF with ``integer_part`` shifted by ``n``, sharing the
         same generator and convergent cache.
@@ -276,7 +283,7 @@ class SimpleContinuedFraction:
         """
         return self._from_shared(self, self._integer_part + n)
     
-    def tail(self) -> 'SimpleContinuedFraction':
+    def tail(self) -> Self:
         """
         Returns the tail of the SCF, i.e. a new instance with the same
         generator and convergent cache, but with ``integer_part = 0``.
@@ -291,7 +298,7 @@ class SimpleContinuedFraction:
         """Returns the integer part of the SCF."""
         return self.integer_part
 
-    def __add__(self, n: int) -> 'SimpleContinuedFraction':
+    def __add__(self, n: int) -> Self:
         """
         Shifts the integer part by ``n`` (``scf + n``).
 
@@ -302,7 +309,7 @@ class SimpleContinuedFraction:
         
         return self.shift(n)
 
-    def __radd__(self, n: int) -> 'SimpleContinuedFraction':
+    def __radd__(self, n: int) -> Self:
         """
         Shifts the integer part by ``n`` (``n + scf``).
 
@@ -323,7 +330,7 @@ class SimpleContinuedFraction:
         p, q = self.convergent(50)
         return p / q
     
-    def __neg__(self) -> 'SimpleContinuedFraction':
+    def __neg__(self) -> Self:
         """
         Returns the additive inverse of the SCF, i.e., a new SCF representing -x if self represents x.
         """
@@ -452,7 +459,7 @@ class SimpleContinuedFraction:
         h, k = self.tail_convergent(n)
         return self.integer_part * k + h, k
     
-    def inverse(self) -> 'SimpleContinuedFraction':
+    def inverse(self) -> Self:
         """
         Returns the multiplicative inverse of the SCF, i.e. ``1/scf``.
 
@@ -527,6 +534,7 @@ class FiniteSimpleContinuedFraction(SimpleContinuedFraction):
       :meth:`from_decimal`.
     """
     __slots__ = ()
+    is_finite = True
 
     def __init__(self, partial_quotients: Sequence[int]|FiniteGenerator, integer_part: int = 0, dtype: Optional[str] = None):
         """
@@ -555,7 +563,7 @@ class FiniteSimpleContinuedFraction(SimpleContinuedFraction):
     @property
     def generator(self) -> FiniteGenerator:
         """The :class:`~catena.generators.FiniteGenerator` holding the partial quotients."""
-        return super().generator
+        return cast(FiniteGenerator, super().generator)
 
     @property
     def partial_quotients(self) -> Tuple[int, ...]:
@@ -885,17 +893,20 @@ class PeriodicSimpleContinuedFraction(SimpleContinuedFraction):
     """
     __slots__ = ('_quadratic_coefficients', '_quadratic_surd', '_conjugate')
 
-    def __init__(self, period: Sequence[int], pre_period: Optional[Sequence[int]] = [], integer_part: int = 0, dtypes: Optional[Tuple[str, str]] = None):
+    def __init__(self, period: Union[Sequence[int], 'PeriodicGenerator'], pre_period: Sequence[int] = (), integer_part: int = 0, dtypes: Tuple[Optional[str], Optional[str]] = (None, None)):
         """
         Initialises the periodic SCF from non-repeating and repeating parts.
 
         Args:
+            period (Sequence[int] | PeriodicGenerator): The repeating partial quotients
+                ``b₁, b₂, …, bₙ`` (all must be strictly positive). If a ``PeriodicGenerator`` 
+                is provided, its period and pre-period are used directly and the ``pre_period`` 
+                and ``dtypes`` arguments are ignored.
             pre_period (Sequence[int], optional): The non-repeating partial
-                quotients ``a₁, a₂, …, aₘ`` (all must be strictly positive).
-            period (Sequence[int]): The repeating partial quotients
-                ``b₁, b₂, …, bₙ`` (all must be strictly positive).
+                quotients ``a₁, a₂, …, aₘ`` (all must be strictly positive).  
+                Defaults to an empty sequence (i.e. no pre-period).
             integer_part (int): The integer part ``a₀``.  Defaults to ``0``.
-            dtypes (Tuple[str, str], optional): Force specific
+            dtypes (Tuple[Optional[str], Optional[str]], optional): Force specific
                 :class:`array.array` typecodes for compact storage of the
                 period and pre-period respectively (each one of ``'B'``, ``'H'``, ``'I'``, ``'L'``, ``'Q'``).
                 When ``None``, the smallest fitting typecode is chosen automatically. 
@@ -903,15 +914,10 @@ class PeriodicSimpleContinuedFraction(SimpleContinuedFraction):
                     for only one of the two sequences.
         """
 
-        if dtypes is None:
-            dtypes = (None, None)
-
-        if len(dtypes) != 2:
-            raise ValueError(f"Expected a tuple of two typecodes for 'dtypes' but got {dtypes}")
-
         if isinstance(period, PeriodicGenerator):
             generator = period
         else:
+        
             generator = PeriodicGenerator(period=period, pre_period=pre_period, dtypes=dtypes)
 
         super().__init__(generator=generator, integer_part=integer_part)
@@ -925,7 +931,7 @@ class PeriodicSimpleContinuedFraction(SimpleContinuedFraction):
     @property
     def generator(self) -> PeriodicGenerator:
         """The :class:`~catena.generators.PeriodicGenerator` holding the partial quotients."""
-        return super().generator
+        return cast(PeriodicGenerator, super().generator)
     
     @property
     def non_repeating_part(self) -> Tuple[int, ...]:
@@ -1047,7 +1053,11 @@ class PeriodicSimpleContinuedFraction(SimpleContinuedFraction):
             return self._quadratic_surd
         
         A, B, C = self.quadratic_coefficients()
-        P, Q, D = mathlib.quadratic.quadratic_surd_from_coefficients(A, B, C)
+        coefs = mathlib.quadratic.quadratic_surd_from_coefficients(A, B, C)
+        if coefs is None:
+            raise ValueError("The quadratic coefficients do not correspond to a valid quadratic surd (discriminant must be non-square and positive)")
+        
+        P, Q, D = coefs
 
         _int, pre_period, period = mathlib.convert.from_quadratic_surd_to_scf(P, Q, D)
         if self.integer_part == _int and self.non_repeating_part == pre_period and self.period == period:
@@ -1058,19 +1068,6 @@ class PeriodicSimpleContinuedFraction(SimpleContinuedFraction):
             # Otherwise, the original SCF is itself the conjugate of the normalized surd form, so we need to negate the surd parameters to get the correct value.
             self._quadratic_surd = (-P, -Q, D)
             return self._quadratic_surd
-
-    def is_principal_surd(self) -> bool:
-        """
-        Checks if the value of this periodic SCF is the principal root of its quadratic equation.
-
-        The principal root of A·x² + B·x + C = 0 is the one with the positive square root in the surd representation (P + √D)/Q. 
-        If the value of this SCF corresponds to the negative square root (P - √D)/Q, then it is not the principal surd.
-
-        Returns:
-            bool: True if this SCF is the principal surd, False otherwise.
-        """
-        _, Q, _ = self.quadratic_surd()
-        return Q > 0
 
     @override
     def inverse(self) -> 'PeriodicSimpleContinuedFraction':

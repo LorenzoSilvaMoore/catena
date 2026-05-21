@@ -78,17 +78,17 @@ def quadratic_roots_from_coefficients(A: int, B: int, C: int) -> Optional[Tuple[
         or ``None`` if ``B² - 4AC < 0``.
     """
     sign = get_sign(A)
-    A, B, C = Decimal(A * sign), Decimal(B * sign), Decimal(C * sign)
+    Av, Bv = Decimal(A * sign), Decimal(B * sign)
     discriminant = B**2 - 4 * A * C
     if discriminant < 0:
         return None  # No real roots
     sqrt_disc = Decimal(discriminant).sqrt()
-    x0 = (-B + sqrt_disc) / (2 * A)
-    x1 = (-B - sqrt_disc) / (2 * A)
+    x0 = (-Bv + sqrt_disc) / (2 * Av)
+    x1 = (-Bv - sqrt_disc) / (2 * Av)
     return x0, x1
 
 
-def quadratic_surd_from_coefficients(A: int, B: int, C: int) -> Optional[Tuple[Decimal, Decimal]]:
+def quadratic_surd_from_coefficients(A: int, B: int, C: int) -> Optional[Tuple[int, int, int]]:
     """
     Converts the quadratic equation ``A·x² + B·x + C = 0`` into the canonical
     surd form ``(P + √D) / Q`` by reducing coefficients by their GCD and

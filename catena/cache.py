@@ -51,7 +51,7 @@ class BaseCache(UserDict):
         This class is experimental.  Its interface is subject to change
         without notice.
     """
-    def __init__(self, *args: Any, func: Callable, maxsize: int = None, prune_key: Callable[[int], tuple[int, Optional[str]]] = None, seed: dict = None, **kwargs: Any) -> None:
+    def __init__(self, *args: Any, func: Callable, maxsize: Optional[int] = None, prune_key: Optional[Callable[[int], tuple[int, Optional[str]]]] = None, seed: Optional[dict] = None, **kwargs: Any) -> None:
         """
         Initialises the cache.
 
@@ -88,7 +88,7 @@ class BaseCache(UserDict):
         self._smallest_key = float('inf')
         self._largest_key = float('-inf')
         self._maxsize = maxsize
-        self._prune_key = prune_key if prune_key is not None else (lambda k: (max(k - 1, 2),))
+        self._prune_key = prune_key if prune_key is not None else (lambda k: (max(k - 1, 2), None))
         if self._maxsize is not None and (not isinstance(self._maxsize, int) or self._maxsize <= 0):
             raise ValueError(f"BaseCache maxsize must be a positive integer or None, got {self._maxsize!r}")
         if seed:
@@ -239,7 +239,7 @@ class BaseCache(UserDict):
         """Returns self for backward compatibility."""
         return self
     
-    def prune(self, n: int = 2, order: str = 'asc'):
+    def prune(self, n: int = 2, order: Optional[str] = 'asc'):
         """
         Retains only the ``n`` largest-keyed entries, discarding the rest.
 
@@ -256,6 +256,9 @@ class BaseCache(UserDict):
             self.clear()
             return
         
+        if order is None:
+             order = 'asc'
+
         if order == 'asc':
             keys_to_keep = heapq.nlargest(n, self.data)
             new_data = {k: self.data[k] for k in keys_to_keep}

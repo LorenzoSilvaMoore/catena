@@ -1,7 +1,7 @@
 from importlib.metadata import version, PackageNotFoundError
 
 try:
-    __version__ = version("catena-scf")
+    __version__: str | None = version("catena-scf")
 except PackageNotFoundError:
     __version__ = None  # package not installed (e.g. running from source)
 
