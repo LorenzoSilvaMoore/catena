@@ -32,6 +32,7 @@ The standard two-term recurrence is split into two layers:
 * ``convergent(n)`` — lifts the tail convergent to the full SCF by
   incorporating the integer part ``a₀``.
 """
+import weakref
 
 from fractions import Fraction
 
@@ -153,15 +154,18 @@ class SimpleContinuedFraction:
         "_generator",
         "_tail_cache",
         "_cached_inverse",
-        "_integer_part"
+        "_integer_part",
+        "__weakref__",
     )
     is_finite = False  # Sentinel value for type checking; overridden to True in FSCF
+    _empty_cached_entry = lambda *args, **kwargs: None  # Sentinel for an empty cache entry
 
     if TYPE_CHECKING:
         _generator: Generator
         _tail_cache: BaseCache
-        _cached_inverse: Optional['SimpleContinuedFraction']
+        _cached_inverse: weakref.ReferenceType[Self]
         _integer_part: int
+    
 
     def __init__(self, generator: Callable[[int], int], integer_part: int = 0):
         """
@@ -187,6 +191,7 @@ class SimpleContinuedFraction:
 
         super().__setattr__("_generator", generator)
         super().__setattr__("_tail_cache", BaseCache(func=self._tail_convergent))
+        super().__setattr__("_cached_inverse", self._empty_cached_entry) # Initialize the cached inverse as a weak reference to None
     
     def __setattr__(self, name, value):
         """
@@ -204,7 +209,7 @@ class SimpleContinuedFraction:
         """
         if name in {"_generator", "_tail_cache"}:
             raise AttributeError(f"'{self.__class__.__name__}.{name}' is immutable and cannot be modified after initialization")
-        if name == "_cached_inverse" and hasattr(self, "_cached_inverse"):
+        if name == "_cached_inverse" and self._cached_inverse() is not None:
             raise AttributeError(f"'{self.__class__.__name__}._cached_inverse' is write-once and has already been set")
         super().__setattr__(name, value)
 
@@ -480,8 +485,8 @@ class SimpleContinuedFraction:
         Returns:
             SimpleContinuedFraction: The multiplicative inverse of this SCF.
         """
-        if hasattr(self, '_cached_inverse'): 
-            return self._cached_inverse
+        if hasattr(self, '_cached_inverse') and self._cached_inverse() is not None: 
+            return cast(Self, self._cached_inverse())
         
         if self.integer_part == 0:
             new_integer_part = self.generator(0)
@@ -490,13 +495,15 @@ class SimpleContinuedFraction:
             new_integer_part = 0
             new_generator = self.generator.prepend(FiniteGenerator([self.integer_part])) #lambda n: self.generator(n - 1) if n > 0 else self.integer_part
         else:
-            self._cached_inverse = -(-self).inverse() # Handle negative integer part by negating, inverting, and negating again to avoid complications with prepending negative integers.
-            self._cached_inverse._cached_inverse = self
-            return self._cached_inverse
+            result = -(-self).inverse()
+            self._cached_inverse = weakref.ref(result)
+            result._cached_inverse = weakref.ref(self)
+            return result
         
-        self._cached_inverse = type(self)(new_generator, integer_part=new_integer_part)
-        self._cached_inverse._cached_inverse = self   # Cache the inverse of the inverse as the original SCF
-        return self._cached_inverse            # Make .inverse idempotent pair-wise while avoiding unecessary cloning.
+        result = type(self)(new_generator, integer_part=new_integer_part)
+        self._cached_inverse = weakref.ref(result)
+        result._cached_inverse = weakref.ref(self)   # Cache the inverse of the inverse as the original SCF
+        return result            # Make .inverse idempotent pair-wise while avoiding unecessary cloning.
     
     def segment(self, n: int) -> 'FiniteSimpleContinuedFraction':
         """
@@ -811,8 +818,8 @@ class FiniteSimpleContinuedFraction(SimpleContinuedFraction):
             FiniteSimpleContinuedFraction: The multiplicative inverse of this
             finite SCF.
         """
-        if hasattr(self, '_cached_inverse'):
-            return self._cached_inverse
+        if hasattr(self, '_cached_inverse') and self._cached_inverse() is not None:
+            return cast(Self, self._cached_inverse())
         
         if self.size == 0 and self.integer_part == 0:
             raise ZeroDivisionError("Cannot invert a zero value")
@@ -891,7 +898,12 @@ class PeriodicSimpleContinuedFraction(SimpleContinuedFraction):
       :meth:`is_conjugate_root`, :meth:`inverse` (overridden),
       :meth:`conjugate`.
     """
-    __slots__ = ('_quadratic_coefficients', '_quadratic_surd', '_conjugate')
+    __slots__ = ('_quadratic_coefficients', '_quadratic_surd', '_cached_conjugate')
+
+    if TYPE_CHECKING:
+        _quadratic_coefficients: Tuple[int, int, int]
+        _quadratic_surd: Tuple[int, int, int]
+        _cached_conjugate: weakref.ReferenceType['PeriodicSimpleContinuedFraction']
 
     def __init__(self, period: Union[Sequence[int], 'PeriodicGenerator'], pre_period: Sequence[int] = (), integer_part: int = 0, dtypes: Tuple[Optional[str], Optional[str]] = (None, None)):
         """
@@ -920,11 +932,15 @@ class PeriodicSimpleContinuedFraction(SimpleContinuedFraction):
         
             generator = PeriodicGenerator(period=period, pre_period=pre_period, dtypes=dtypes)
 
+        super().__setattr__('_cached_conjugate', self._empty_cached_entry)
         super().__init__(generator=generator, integer_part=integer_part)
 
     def __setattr__(self, name, value):
-        if name in {"_quadratic_coefficients", "_quadratic_surd", "_conjugate"} and hasattr(self, name):
-            raise AttributeError(f"'{self.__class__.__name__}.{name}' is write-once and has already been set")
+        if name in {"_quadratic_coefficients", "_quadratic_surd", "_cached_conjugate"} and hasattr(self, name):
+            current = getattr(self, name)
+            # Allow overwrite if still the sentinel or if the weakref has been collected
+            if current is not self._empty_cached_entry and (not callable(current) or current() is not None):
+                raise AttributeError(f"'{self.__class__.__name__}.{name}' is write-once and has already been set")
         
         super().__setattr__(name, value)
 
@@ -985,7 +1001,7 @@ class PeriodicSimpleContinuedFraction(SimpleContinuedFraction):
         return (Decimal(P) + Decimal(D).sqrt())/Decimal(Q)
 
     @classmethod
-    def from_quadratic_surd(cls, P: int, Q: int, D: int) -> 'PeriodicSimpleContinuedFraction':
+    def from_quadratic_surd(cls, P: int, Q: int, D: int) -> Self:
         """
         Constructs a :class:`PeriodicSimpleContinuedFraction` from the parameters of a quadratic surd.
 
@@ -1070,7 +1086,7 @@ class PeriodicSimpleContinuedFraction(SimpleContinuedFraction):
             return self._quadratic_surd
 
     @override
-    def inverse(self) -> 'PeriodicSimpleContinuedFraction':
+    def inverse(self) -> Self:
         """
         Returns the multiplicative inverse of the periodic SCF, i.e. ``1/scf``.
 
@@ -1081,8 +1097,8 @@ class PeriodicSimpleContinuedFraction(SimpleContinuedFraction):
             PeriodicSimpleContinuedFraction: The multiplicative inverse of this
             periodic SCF.
         """
-        if hasattr(self, '_cached_inverse'):
-            return self._cached_inverse
+        if hasattr(self, '_cached_inverse') and self._cached_inverse() is not None:
+            return cast(Self, self._cached_inverse())
         
         _, _, C = self.quadratic_coefficients()
         if C == 0:
@@ -1090,12 +1106,12 @@ class PeriodicSimpleContinuedFraction(SimpleContinuedFraction):
 
         P, Q, D = self.quadratic_surd()
         if Q > 0: # Principal surd case
-            self._cached_inverse = PeriodicSimpleContinuedFraction.from_quadratic_surd(-Q * P, -(P**2 - D), D * Q**2)
+            self._cached_inverse = weakref.ref(type(self).from_quadratic_surd(-Q * P, -(P**2 - D), D * Q**2))
         else: # Conjugate surd case
-            self._cached_inverse = PeriodicSimpleContinuedFraction.from_quadratic_surd(Q * P, (P**2 - D), D * Q**2)
+            self._cached_inverse = weakref.ref(type(self).from_quadratic_surd(Q * P, (P**2 - D), D * Q**2))
 
-        self._cached_inverse._cached_inverse = self  # Cache the inverse of the inverse as the original SCF
-        return self._cached_inverse
+        cast(Self, self._cached_inverse())._cached_inverse = weakref.ref(self)  # Cache the inverse of the inverse as the original SCF
+        return cast(Self, self._cached_inverse())
 
     def is_principal_surd(self) -> bool:
         """
@@ -1134,12 +1150,13 @@ class PeriodicSimpleContinuedFraction(SimpleContinuedFraction):
             PeriodicSimpleContinuedFraction: The algebraic conjugate of this
             periodic SCF.
         """
-        if hasattr(self, '_conjugate'):
-            return self._conjugate
+        if hasattr(self, '_cached_conjugate') and self._cached_conjugate() is not None:
+            return cast(Self, self._cached_conjugate())
 
         P, Q, D = self.quadratic_surd()
         P_conj, Q_conj = -P, -Q
-        self._conjugate = PeriodicSimpleContinuedFraction.from_quadratic_surd(P_conj, Q_conj, D)
-        self._conjugate._conjugate = self
+        result = type(self).from_quadratic_surd(P_conj, Q_conj, D)
+        self._cached_conjugate = weakref.ref(result)
+        result._cached_conjugate = weakref.ref(self)
 
-        return self._conjugate
+        return result

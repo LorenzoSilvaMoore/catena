@@ -613,7 +613,7 @@ if __name__ == "__main__":
     #print(catena.PeriodicSimpleContinuedFraction.from_quadratic_surd(-15, -6, 10))
 
 
-    phi = catena.PeriodicSimpleContinuedFraction(period=(1,), pre_period=(), integer_part=0)
+    phi = catena.PeriodicSimpleContinuedFraction(period=(1,), pre_period=(), integer_part=0).conjugate()
 
     print(phi.convergents.as_fraction(100))
 

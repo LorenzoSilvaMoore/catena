@@ -26,7 +26,7 @@ from collections.abc import Callable, Collection, Sequence
 from array import array
 
 from math import gcd
-from typing import Optional, Tuple, Union, cast, override, TYPE_CHECKING
+from typing import Optional, Tuple, Union, cast, overload, override, TYPE_CHECKING
 
 from .cache import BaseCache
 from .strings import safe_int_str
@@ -443,6 +443,19 @@ class FiniteGenerator(Generator):
         final_dtype = None if dtype == 'Z' else dtype
 
         return FiniteGenerator(new_data, dtype=final_dtype)
+    
+    def concatenate(self, fg: 'FiniteGenerator') -> 'FiniteGenerator':
+        """
+        Concatenates another FiniteGenerator to this one, returning a new FiniteGenerator that produces the combined sequence.
+        Equivalent to ``self.insert(fg, at=self.size)``.
+
+        Args:
+            fg (FiniteGenerator): The generator to concatenate.  The first term of ``fg`` will become the term immediately following the last term of this generator in the resulting sequence.
+
+        Returns:
+            FiniteGenerator: A new generator that produces the combined sequence with ``fg`` concatenated to this generator.
+        """
+        return self.insert(fg, at=self.size)
 
     def __new__(cls, data, dtype=None, *args, **kwargs):
         if isinstance(data, cls):
@@ -484,7 +497,13 @@ class FiniteGenerator(Generator):
         """Last element of the sequence, or ``None`` if empty."""
         return self._data[-1] if self.size > 0 else None
 
-    def __getitem__(self, index: int) -> int:
+    @overload
+    def __getitem__(self, index: int) -> int: ...
+    @overload
+    def __getitem__(self, index: slice) -> 'FiniteGenerator': ...
+    def __getitem__(self, index: Union[int, slice]) -> Union[int, 'FiniteGenerator']:
+        if isinstance(index, slice):
+            return FiniteGenerator(cast(Sequence[int], self._data[index]), dtype=self.dtype)
         return self._data[index]
 
     def __iter__(self):
@@ -506,6 +525,18 @@ class FiniteGenerator(Generator):
         if not isinstance(other, FiniteGenerator):
             return NotImplemented
         return self.dtype == other.dtype and self._data == other._data
+    
+    def __add__(self, other):
+        if isinstance(other, Sequence) and all(isinstance(x, int) for x in other):
+            other = FiniteGenerator(other)
+
+        if not isinstance(other, FiniteGenerator):
+            return NotImplemented
+        
+        return self.concatenate(other)
+    
+    def __radd__(self, other):
+        return self.__add__(other)
 
     @property
     def view(self) -> memoryview:
@@ -580,6 +611,7 @@ class PeriodicGenerator(Generator):
             return self
         else:
             # Advancing a periodic generator effectively rotates the pre-period and period.
+            new_pre_period: Sequence[int] | FiniteGenerator
             if n < len(self.pre_period): # advance pre-period, period stays the same
                 new_pre_period = self.pre_period[n:]
                 new_period = self.period

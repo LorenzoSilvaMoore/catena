@@ -195,7 +195,7 @@ float(c)                        # 0.5
 # Multiplicative inverse
 inv = a.inverse()               # FiniteSimpleContinuedFraction for 3/1
 inv.terminal_convergent         # (3, 1)
-inv.inverse() is a              # True — cached, returns original object
+inv.inverse() is a              # True — cached reference, returns original object
 ```
 
 ### Periodic SCF — quadratic irrationals
