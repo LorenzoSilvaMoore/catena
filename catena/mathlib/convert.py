@@ -201,12 +201,6 @@ def from_quadratic_surd_to_scf(P: int, Q: int, D: int):
 
     if (s:=isqrt(D))**2 == D:
         raise ValueError("D must not be a perfect square")
-    
-    # s = D**0.5 # TODO: find a way to avoid floating point approximation here.
-    # s = s + 0.5
-
-    # if Q < 0:
-    #     P, Q, s = -P, -Q, -s
 
     m, d = P, Q
     a = (m + s) // d

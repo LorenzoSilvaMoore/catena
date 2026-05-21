@@ -17,7 +17,9 @@ extra_javascript:
   - https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js
 nav:
   - Home: index.md
-  - Examples: examples.md
+  - Examples: 
+      - Quick examples: examples.md
+      - Short projects: projects.md
   - API Reference:
       - catena: api/catena.md
       - generators: api/generators.md
