@@ -18,8 +18,8 @@ extra_javascript:
 nav:
   - Home: index.md
   - Examples: 
-      - Quick examples: examples.md
-      - Short projects: projects.md
+      - Quick examples: examples/examples.md
+      - Short projects: examples/projects.md
   - API Reference:
       - catena: api/catena.md
       - generators: api/generators.md
