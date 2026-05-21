@@ -7,6 +7,50 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ---
 
+## [0.6.0] — 2026-05-21
+
+### Changed
+
+- `_cached_inverse` (all SCF classes) and `_cached_conjugate`
+  (`PeriodicSimpleContinuedFraction`) now store `weakref.ref` instead of
+  hard references.  Calling `.inverse()` or `.conjugate()` no longer
+  prevents the returned object from being garbage-collected once all
+  external references to it are dropped; the value is transparently
+  recomputed on the next call.  The symmetric identity
+  `x.inverse().inverse() is x` still holds while the intermediate object
+  remains reachable.
+- `SimpleContinuedFraction.__slots__` now includes `"__weakref__"` to
+  enable weak referencing on all SCF subclasses.
+- `_inverse` renamed to `_cached_inverse` across all three SCF classes.
+  *(The rename was part of 0.5.0 but only applied to the slot declaration;
+  the attribute is fully unified as `_cached_inverse` from this release.)*
+
+### Fixed
+
+- Comprehensive mypy-compatible type annotations across the codebase:
+  covariant return types use `Self`; nullable parameters use `Optional[T]`;
+  `@overload` stubs added to `FiniteConvergentView.__getitem__`; `cast()`
+  used for narrowed generator properties; slot annotations guarded under
+  `TYPE_CHECKING`.  Running `mypy catena/` now reports zero errors.
+
+### Tests
+
+- `testing/test_cache_weakrefs.py` — 18 new tests covering weakref
+  identity, GC behaviour, transparent recomputation after collection,
+  write-once guard, and mutual non-retention of inverse/conjugate pairs.
+
+### Documentation
+
+- `docs/examples.md` moved to `docs/examples/examples.md`; new
+  `docs/examples/projects.md` adds six self-contained worked projects:
+  π approximation, Pell's equation, equal temperament, leap-year
+  calendars, Gauss-Kuzmin statistics, and 100 000 digits of *e* via
+  convergent squeezing.
+- `mkdocs.yml` nav updated to expose both pages under the *Examples*
+  section.
+
+---
+
 ## [0.5.0] — 2026-05-18
 
 ### Added

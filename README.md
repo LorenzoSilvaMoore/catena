@@ -327,6 +327,7 @@ testing/
 ├── test_periodic_scf.py         # PeriodicSimpleContinuedFraction tests
 ├── test_generators.py           # Generator / CachedGenerator / FiniteGenerator / PeriodicGenerator tests
 ├── test_cache.py                # BaseCache tests
+├── test_cache_weakrefs.py       # Weakref caching semantics: GC behaviour, recomputation, write-once guard
 ├── test_math_core.py            # mathlib.core tests
 ├── test_math_arithmetic.py      # mathlib.arithmetic tests
 ├── test_math_quadratic.py       # mathlib.quadratic + convert surd helpers tests
@@ -363,11 +364,13 @@ allows `shift` and integer addition to create new SCF views sharing a fully
 populated cache without recomputation.  For periodic SCFs the same tail is
 shared between an instance and its `inverse()` / `conjugate()` counterparts.
 
-**Write-once inverse and conjugate.**  The first call to `inverse()` or
-`conjugate()` on a `SimpleContinuedFraction` or `PeriodicSimpleContinuedFraction`
-stores the result in a frozen attribute.  Subsequent calls return the cached
-object directly, and the double-inverse / double-conjugate identity `x.inv().inv() is x`
-holds by construction.
+**Weakref-cached inverse and conjugate.**  The first call to `.inverse()` or
+`.conjugate()` stores the result in a `weakref.ref` attribute.  Subsequent
+calls return the live object directly if it is still reachable, or
+transparently recompute and re-cache it otherwise.  The symmetric identity
+`x.inverse().inverse() is x` holds while the intermediate object remains
+reachable — the weakref prevents inverse/conjugate pairs from pinning each
+other in memory.
 
 **Compact storage.**  `FiniteGenerator` automatically selects the smallest
 unsigned `array.array` typecode that covers the value range, falling back to
